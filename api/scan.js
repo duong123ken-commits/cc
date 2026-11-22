@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = (process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim();
+  const model = 'gemini-3.8-flash';
 
   if (!apiKey) {
     return res.status(500).json({
@@ -37,35 +37,41 @@ QUY TẮC BẮT BUỘC:
 Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính price = amount / qty. Chỉ trả về object JSON thuần.`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [
-          {
-            parts: [
-              { text: userPrompt },
-              {
-                inline_data: {
-                  mime_type: mediaType,
-                  data: base64
-                }
+    const payload = JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [
+        {
+          parts: [
+            { text: userPrompt },
+            {
+              inline_data: {
+                mime_type: mediaType,
+                data: base64
               }
-            ]
-          }
-        ],
+            }
+          ]
+        }
+      ],
       generationConfig: {
-  temperature: 0.1,
-  maxOutputTokens: 4096,
-  responseMimeType: 'application/json',
-  thinkingConfig: { thinkingBudget: 0 }
-}
-      })
+        temperature: 0.1,
+        maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     });
 
-    const data = await response.json();
+    let response;
+    let data = {};
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+      data = await response.json().catch(() => ({}));
+      if (response.ok || (response.status !== 503 && response.status !== 429)) break;
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
 
     if (!response.ok) {
       const msg = data?.error?.message || `HTTP ${response.status}`;
