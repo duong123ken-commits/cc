@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quét Hóa Đơn → Excel</title>
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- xlsx-js-style for styled Excel (.xlsx) export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#2563eb',
+              dark: '#1e40af',
+              soft: '#eff6ff',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @media (max-width: 768px) {
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-[#f1f5f9] text-[#0f172a] font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="bg-gradient-to-br from-[#2563eb] to-[#1e40af] text-white shadow-md rounded-b-2xl">
+    <div class="max-w-[1150px] mx-auto px-4 py-6 sm:py-7 text-center">
+      <h1 class="text-xl sm:text-2xl font-bold tracking-tight flex items-center justify-center gap-2">
+        <span>🧾</span>
+        <span>Quét Hóa Đơn → Excel</span>
+      </h1>
+      <p class="text-blue-100 text-xs sm:text-sm mt-1.5 font-medium">
+        Tải ảnh · AI đọc dữ liệu · Chọn ngày · Sửa trực tiếp · Xuất Excel công nợ theo mẫu
+      </p>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-[1150px] w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-5">
+
+    <!-- STEP 1: UPLOAD IMAGES -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+      <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
+        <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] flex items-center gap-1.5">
+          <span>📸</span>
+          <span>Bước 1: Tải Ảnh Hóa Đơn</span>
+        </h2>
+        <span id="imgCountBadge" class="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+          0 ảnh
+        </span>
+      </div>
+
+      <!-- Drag & Drop Zone -->
+      <div
+        id="dropzone"
+        class="border-2 border-dashed border-[#2563eb] rounded-2xl p-5 sm:p-7 text-center bg-[#eff6ff] hover:bg-blue-100/70 transition cursor-pointer"
+      >
+        <div class="text-3xl mb-1.5">📄</div>
+        <p class="text-[#1e40af] font-semibold text-sm sm:text-base">
+          Kéo-thả ảnh hóa đơn vào đây
+        </p>
+        <p class="text-slate-500 text-xs sm:text-sm mt-1">
+          Tự động nén ảnh (tối đa 1600px · JPEG 80%) để gửi siêu nhanh, không bị timeout trên điện thoại
+        </p>
+
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2.5 mt-4">
+          <button
+            type="button"
+            id="btnPickFiles"
+            class="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#2563eb] hover:bg-[#1e40af] text-white font-semibold text-sm shadow-sm transition"
+          >
+            <span>📁</span>
+            <span>Chọn ảnh từ máy</span>
+          </button>
+          <button
+            type="button"
+            id="btnTakePhoto"
+            class="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-[#1e40af] border border-blue-200 font-semibold text-sm shadow-sm transition"
+          >
+            <span>📷</span>
+            <span>Chụp hóa đơn</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Hidden File Inputs -->
+      <input type="file" id="fileInput" multiple accept="image/*" class="hidden">
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
+
+      <!-- Thumbnail Grid -->
+      <div id="imageList" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5 sm:gap-3 mt-4"></div>
+
+      <!-- Clear All Images Button -->
+      <div id="clearImgWrap" class="mt-4 hidden">
+        <button
+          type="button"
+          id="btnClearImg"
+          class="min-h-[44px] w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-500 hover:bg-slate-600 text-white font-semibold text-sm transition"
+        >
+          <span>🗑️</span>
+          <span>Xóa Tất Cả Ảnh</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- STEP 2: AI SCANNING -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+      <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] pb-3 mb-4 border-b border-slate-100 flex items-center gap-1.5">
+        <span>🤖</span>
+        <span>Bước 2: Quét Ảnh Bằng AI</span>
+      </h2>
+
+      <button
+        type="button"
+        id="btnScan"
+        class="w-full min-h-[48px] inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-[#2563eb] to-[#1e40af] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm sm:text-base shadow-sm transition"
+      >
+        <span>🔍</span>
+        <span id="btnScanText">Quét Hóa Đơn</span>
+      </button>
+
+      <!-- Progress Bar -->
+      <div id="progress" class="mt-3.5 hidden">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1">
+          <span id="progressLabel">Đang xử lý...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+          <div id="progressBar" class="h-full bg-[#2563eb] rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Processing Log -->
+      <div class="mt-3.5">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold text-slate-500">Nhật ký xử lý</span>
+          <button type="button" id="btnClearLog" class="text-xs text-blue-600 hover:text-blue-800 underline font-medium">
+            Xóa log
+          </button>
+        </div>
+        <pre
+          id="log"
+          class="custom-scroll font-mono text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3 min-h-[76px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words"
+        >Sẵn sàng. Tải ảnh hóa đơn ở Bước 1 rồi nhấn "Quét Hóa Đơn".</pre>
+      </div>
+    </section>
+
+    <!-- STEP 3: HEADER INFO (TOP OF EXCEL FILE) -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
+        <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] flex items-center gap-1.5">
+          <span>📋</span>
+          <span>Bước 3: Thông Tin Bảng Công Nợ</span>
+        </h2>
+        <span class="text-xs text-slate-500">Phần đầu file Excel · AI tự điền nếu đọc được từ hóa đơn</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div class="md:col-span-2">
+          <label for="hSupplier" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Tên nhà cung cấp</label>
+          <input type="text" id="hSupplier" data-h="supplier" placeholder="VD: TIỆM BÁNH THÁI THẠNH"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="md:col-span-2">
+          <label for="hAddress" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Địa chỉ</label>
+          <input type="text" id="hAddress" data-h="address" placeholder="Địa chỉ nhà cung cấp"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="hTax" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Mã số thuế</label>
+          <input type="text" id="hTax" data-h="taxCode" inputmode="numeric" placeholder="VD: 0740770067"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="hPhone" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Số điện thoại</label>
+          <input type="tel" id="hPhone" data-h="phone" placeholder="VD: 0918202648"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="md:col-span-2">
+          <label for="hCustomer" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Khách hàng (tên đầy đủ)</label>
+          <input type="text" id="hCustomer" data-h="customer" placeholder="VD: TRƯỜNG TIỂU HỌC, THCS VÀ THPT VIỆT ANH 3"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="hCustomerShort" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Tên khách viết gọn (dùng trong tiêu đề)</label>
+          <input type="text" id="hCustomerShort" data-h="customerShort" placeholder="VD: VIỆT ANH 3"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label for="hPeriod" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">📅 Kỳ công nợ (tháng / năm)</label>
+          <input type="month" id="hPeriod" data-h="period"
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div class="md:col-span-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="hTitle" class="block text-xs sm:text-sm font-semibold text-slate-600">Tiêu đề bảng</label>
+            <button type="button" id="btnResetTitle" class="text-xs text-blue-600 hover:text-blue-800 underline font-medium">Tạo lại tự động</button>
+          </div>
+          <input type="text" id="hTitle" data-h="title" placeholder="CÔNG NỢ ... THÁNG ... NĂM ..."
+            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white font-bold text-center uppercase focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="text-xs text-slate-500 mt-1">Tự tạo từ tên khách viết gọn + kỳ công nợ. Bạn có thể sửa tay. Tên file Excel = tiêu đề.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 4: EDIT & EXPORT -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
+        <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] flex items-center gap-1.5">
+          <span>✏️</span>
+          <span>Bước 4: Sửa &amp; Xuất</span>
+        </h2>
+        <div class="flex items-center gap-1.5">
+          <span id="groupCountBadge" class="text-xs font-semibold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">0 hóa đơn</span>
+          <span id="rowCountBadge" class="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">0 dòng</span>
+        </div>
+      </div>
+
+      <!-- Period warning -->
+      <div id="periodWarn" class="hidden mb-3 text-xs sm:text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5"></div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="text-center py-8 px-4 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+        <p class="text-sm font-medium text-slate-500">Chưa có hóa đơn nào</p>
+        <p class="text-xs mt-1">Hãy quét ảnh ở Bước 2 hoặc bấm "➕ Thêm Hóa Đơn" để nhập thủ công</p>
+      </div>
+
+      <!-- Invoice groups -->
+      <div id="groupList" class="space-y-4"></div>
+
+      <!-- SUMMARY BAR -->
+      <div class="mt-4 bg-[#eff6ff] border border-blue-200 rounded-xl px-4 py-3.5 flex flex-wrap items-center justify-between gap-2">
+        <div class="text-sm font-semibold text-slate-700">
+          Tổng số mặt hàng: <span id="summaryCount" class="text-[#2563eb] font-bold">0</span>
+        </div>
+        <div class="text-base sm:text-lg font-bold text-slate-900">
+          TỔNG: <span id="totalSum" class="text-[#1e40af]">0 đ</span>
+        </div>
+      </div>
+
+      <label class="mt-3 flex items-start gap-2 text-sm text-slate-700 cursor-pointer select-none">
+        <input type="checkbox" id="onlyPeriod" class="mt-0.5 w-4 h-4 accent-blue-600">
+        <span>Chỉ xuất các hóa đơn thuộc kỳ công nợ đã chọn <span class="text-slate-400">(hóa đơn chưa có ngày vẫn được xuất)</span></span>
+      </label>
+
+      <!-- EXPORT & ROW ACTIONS -->
+      <div class="grid grid-cols-1 sm:flex sm:flex-wrap gap-2.5 mt-4">
+        <button type="button" id="btnAddGroup"
+          class="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#2563eb] hover:bg-[#1e40af] text-white font-semibold text-sm shadow-sm transition">
+          <span>➕</span><span>Thêm Hóa Đơn</span>
+        </button>
+        <button type="button" id="btnSortDate"
+          class="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-[#1e40af] border border-blue-200 font-semibold text-sm shadow-sm transition">
+          <span>📅</span><span>Sắp Xếp Theo Ngày</span>
+        </button>
+        <button type="button" id="btnExport"
+          class="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#16a34a] hover:bg-green-700 text-white font-semibold text-sm shadow-sm transition">
+          <span>📥</span><span>Xuất Excel Công Nợ</span>
+        </button>
+        <button type="button" id="btnClearAll"
+          class="min-h-[44px] sm:ml-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-500 hover:bg-slate-600 text-white font-semibold text-sm shadow-sm transition">
+          <span>🗑️</span><span>Xóa Tất Cả</span>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500 mt-2.5">Dữ liệu bảng và thông tin công nợ được tự lưu trên trình duyệt này, tải lại trang không bị mất.</p>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="text-center text-slate-400 text-xs py-6 px-4">
+    © 2026 Quét Hóa Đơn → Excel
+  </footer>
+
+  <!-- FULLSCREEN LIGHTBOX MODAL -->
+  <div
+    id="lightboxModal"
+    class="fixed inset-0 z-50 bg-slate-900/85 backdrop-blur-sm hidden items-center justify-center p-4"
+  >
+    <div class="relative max-w-4xl w-full flex flex-col items-center">
+      <div class="w-full flex items-center justify-between text-white mb-2 px-1">
+        <span id="lightboxTitle" class="text-sm font-medium truncate pr-4"></span>
+        <button
+          type="button"
+          id="lightboxClose"
+          class="min-w-[40px] min-h-[40px] rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center text-lg font-bold transition"
+          aria-label="Đóng xem trước"
+        >
+          ✕
+        </button>
+      </div>
+      <img
+        id="lightboxImg"
+        src=""
+        alt="Xem trước hóa đơn"
+        class="max-h-[82vh] max-w-full rounded-xl shadow-2xl object-contain bg-black/20"
+      >
+    </div>
+  </div>
+
+  <!-- CUSTOM CONFIRMATION MODAL -->
+  <div
+    id="confirmModal"
+    class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4"
+  >
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5">
+      <h3 id="confirmTitle" class="text-base font-bold text-slate-900">Xác nhận</h3>
+      <p id="confirmDesc" class="text-sm text-slate-600 mt-2"></p>
+      <div class="flex items-center justify-end gap-2.5 mt-5">
+        <button
+          type="button"
+          id="confirmCancel"
+          class="min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition"
+        >
+          Hủy
+        </button>
+        <button
+          type="button"
+          id="confirmOk"
+          class="min-h-[42px] px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition"
+        >
+          Đồng ý xóa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div
+    id="toast"
+    role="status"
+    aria-live="polite"
+    class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium max-w-[92vw] text-center opacity-0 translate-y-2 pointer-events-none transition-all duration-200"
+  ></div>
+
+  <script>
+    'use strict';
+
+    // =========================================================================
+    // APP STATE & UTILITIES
+    // =========================================================================
+    const MAX_IMAGE_DIM = 1600;
+    const JPEG_QUALITY = 0.8;
+    const REQUEST_TIMEOUT_MS = 90000;
+    const DATA_STORAGE_KEY = 'hoa_don_data_v2';
+
+    let images = [];
+    let groups = [];
+    let header = {
+      supplier: '', address: '', taxCode: '', phone: '',
+      customer: '', customerShort: '', period: '', title: '',
+      titleEdited: false, periodTouched: false, onlyPeriod: false
+    };
+    let isScanning = false;
+
+    const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const $ = (id) => document.getElementById(id);
+    const fmtNum = (n) => Number(n || 0).toLocaleString('vi-VN');
+
+    const fmtBytes = (bytes) => {
+      if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    };
+
+    const escapeAttr = (str) =>
+      String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    function toast(msg, type = 'default') {
+      const el = $('toast');
+      el.textContent = msg;
+      el.classList.remove('bg-slate-900', 'bg-green-700', 'bg-red-600', 'bg-amber-600');
+      if (type === 'ok') el.classList.add('bg-green-700');
+      else if (type === 'error') el.classList.add('bg-red-600');
+      else if (type === 'warn') el.classList.add('bg-amber-600');
+      else el.classList.add('bg-slate-900');
+
+      el.classList.remove('opacity-0', 'translate-y-2', 'pointer-events-none');
+      el.classList.add('opacity-100', 'translate-y-0');
+
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => {
+        el.classList.add('opacity-0', 'translate-y-2', 'pointer-events-none');
+        el.classList.remove('opacity-100', 'translate-y-0');
+      }, 3200);
+    }
+
+    function appendLog(msg) {
+      const box = $('log');
+      const time = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+      box.textContent += `\n[${time}] ${msg}`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    $('btnClearLog').addEventListener('click', () => {
+      $('log').textContent = 'Đã xóa nhật ký.';
+      toast('Đã xóa nhật ký xử lý');
+    });
+
+    function openConfirm(title, desc, onConfirm) {
+      $('confirmTitle').textContent = title;
+      $('confirmDesc').textContent = desc;
+      const modal = $('confirmModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      const close = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      };
+
+      $('confirmCancel').onclick = close;
+      $('confirmOk').onclick = () => {
+        close();
+        onConfirm();
+      };
+      modal.onclick = (e) => {
+        if (e.target === modal) close();
+      };
+    }
+
+    // =========================================================================
+    // STEP 1: IMAGE UPLOAD & CANVAS COMPRESSION
+    // =========================================================================
+    const dropzone = $('dropzone');
+    const fileInput = $('fileInput');
+    const cameraInput = $('cameraInput');
+
+    $('btnPickFiles').addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    $('btnTakePhoto').addEventListener('click', (e) => {
+      e.stopPropagation();
+      cameraInput.click();
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+      addFiles(e.target.files);
+      fileInput.value = '';
+    });
+
+    cameraInput.addEventListener('change', (e) => {
+      addFiles(e.target.files);
+      cameraInput.value = '';
+    });
+
+    ['dragover', 'dragenter'].forEach((ev) => {
+      dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('bg-blue-100', 'scale-[1.01]');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((ev) => {
+      dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('bg-blue-100', 'scale-[1.01]');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      if (e.dataTransfer?.files?.length) {
+        addFiles(e.dataTransfer.files);
+      }
+    });
+
+    function compressImageFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Không thể đọc file ảnh'));
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onerror = () => reject(new Error('File ảnh không hợp lệ'));
+          img.onload = () => {
+            try {
+              let { width, height } = img;
+              if (width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM) {
+                const ratio = Math.min(MAX_IMAGE_DIM / width, MAX_IMAGE_DIM / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+              }
+
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+
+              const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+              const base64 = dataUrl.split(',')[1] || '';
+              const compSize = Math.round((base64.length * 3) / 4);
+
+              resolve({
+                dataUrl,
+                base64,
+                mediaType: 'image/jpeg',
+                origSize: file.size,
+                compSize,
+                width,
+                height
+              });
+            } catch (err) {
+              reject(err);
+            }
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function addFiles(fileList) {
+      const validFiles = Array.from(fileList || []).filter(
+        (f) => f.type && f.type.startsWith('image/')
+      );
+      if (!validFiles.length) return;
+
+      let addedCount = 0;
+      for (const file of validFiles) {
+        const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const name = file.name || `hoadon_${images.length + 1}.jpg`;
+        try {
+          const compressed = await compressImageFile(file);
+          images.push({
+            id,
+            name,
+            dataUrl: compressed.dataUrl,
+            base64: compressed.base64,
+            mediaType: compressed.mediaType,
+            origSize: compressed.origSize,
+            compSize: compressed.compSize,
+            status: 'pending'
+          });
+          addedCount++;
+          appendLog(
+            `Đã nén "${name}": ${fmtBytes(compressed.origSize)} → ${fmtBytes(compressed.compSize)} (${compressed.width}×${compressed.height}px)`
+          );
+          renderImages();
+        } catch (err) {
+          appendLog(`✗ Lỗi nén ảnh "${name}": ${err.message}`);
+          toast(`Không thể xử lý ảnh ${name}`, 'error');
+        }
+      }
+
+      if (addedCount > 0) {
+        toast(`✓ Đã thêm & nén ${addedCount} ảnh hóa đơn`, 'ok');
+      }
+    }
+
+    // Lightbox Preview
+    function openLightbox(src, title) {
+      $('lightboxImg').src = src;
+      $('lightboxTitle').textContent = title || 'Xem trước hóa đơn';
+      const modal = $('lightboxModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeLightbox() {
+      const modal = $('lightboxModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      $('lightboxImg').src = '';
+    }
+
+    $('lightboxClose').addEventListener('click', closeLightbox);
+    $('lightboxModal').addEventListener('click', (e) => {
+      if (e.target === $('lightboxModal')) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+
+    function updateScanButtonText() {
+      const total = images.length;
+      const pending = images.filter((i) => i.status === 'pending' || i.status === 'error').length;
+      if (isScanning) {
+        $('btnScanText').textContent = 'Đang quét hóa đơn...';
+      } else if (total === 0) {
+        $('btnScanText').textContent = 'Quét Hóa Đơn';
+      } else if (pending > 0) {
+        $('btnScanText').textContent = `Quét Hóa Đơn (${pending}/${total} ảnh chưa quét)`;
+      } else {
+        $('btnScanText').textContent = `Quét Lại Tất Cả (${total} ảnh)`;
+      }
+    }
+
+    function renderImages() {
+      const wrap = $('imageList');
+      wrap.innerHTML = '';
+
+      $('imgCountBadge').textContent = `${images.length} ảnh`;
+      $('clearImgWrap').classList.toggle('hidden', images.length === 0);
+
+      images.forEach((img) => {
+        const card = document.createElement('div');
+        card.className = 'relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-square group cursor-pointer shadow-xs';
+
+        let statusText = 'Chưa quét';
+        let statusBg = 'bg-slate-900/75';
+        if (img.status === 'scanning') {
+          statusText = 'Đang quét...';
+          statusBg = 'bg-blue-600/90';
+        } else if (img.status === 'done') {
+          statusText = '✓ Quét xong';
+          statusBg = 'bg-green-600/90';
+        } else if (img.status === 'error') {
+          statusText = '✗ Lỗi';
+          statusBg = 'bg-red-600/90';
+        }
+
+        card.innerHTML = `
+          <img src="${img.dataUrl}" alt="${escapeAttr(img.name)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
+          <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-medium">
+            ${fmtBytes(img.compSize)}
+          </div>
+          <div class="absolute bottom-0 inset-x-0 text-[11px] font-semibold text-white text-center py-1 px-1 ${statusBg}">
+            ${statusText}
+          </div>
+          <button
+            type="button"
+            title="Xóa ảnh"
+            class="del-btn absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-red-600/90 hover:bg-red-700 text-white text-xs font-bold flex items-center justify-center shadow transition"
+          >✕</button>
+        `;
+
+        card.addEventListener('click', () => openLightbox(img.dataUrl, `${img.name} (${fmtBytes(img.compSize)})`));
+        card.querySelector('.del-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          images = images.filter((i) => i.id !== img.id);
+          renderImages();
+          renderGroups();
+          toast('Đã xóa 1 ảnh');
+        });
+
+        wrap.appendChild(card);
+      });
+
+      updateScanButtonText();
+    }
+
+    $('btnClearImg').addEventListener('click', () => {
+      if (!images.length) return;
+      openConfirm(
+        'Xóa tất cả ảnh?',
+        `Bạn muốn xóa toàn bộ ${images.length} ảnh hóa đơn đã tải lên?`,
+        () => {
+          images = [];
+          renderImages();
+          renderGroups();
+          toast('Đã xóa tất cả ảnh');
+        }
+      );
+    });
+
+    // =========================================================================
+    // DATE HELPERS
+    // =========================================================================
+    const pad2 = (n) => String(n).padStart(2, '0');
+
+    function toISODate(str) {
+      const s = String(str || '').trim();
+      if (!s) return '';
+      let y, m, d;
+      let mt = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      if (mt) {
+        [y, m, d] = [Number(mt[1]), Number(mt[2]), Number(mt[3])];
+      } else {
+        mt = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+        if (!mt) return '';
+        [d, m, y] = [Number(mt[1]), Number(mt[2]), Number(mt[3])];
+        if (y < 100) y += 2000;
+      }
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return '';
+      return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
+
+    function fmtDateVN(iso) {
+      if (!iso) return '';
+      const [y, m, d] = iso.split('-').map(Number);
+      return `${d}/${m}/${y}`;
+    }
+
+    function isoToExcelSerial(iso) {
+      const [y, m, d] = iso.split('-').map(Number);
+      return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000;
+    }
+
+    function todayISO() {
+      const t = new Date();
+      return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
+    }
+
+    // =========================================================================
+    // STEP 2: AI SCANNING VIA VERCEL BACKEND (/api/scan)
+    // =========================================================================
+    function parseSafeNumber(val, fallback = 0) {
+      if (typeof val === 'number' && !Number.isNaN(val)) return val;
+      if (typeof val === 'string') {
+        const cleaned = val.replace(/[^\d.,-]/g, '').trim();
+        if (!cleaned) return fallback;
+        const normalized = cleaned.replace(/[.,](?=\d{3}(\D|$))/g, '').replace(',', '.');
+        const num = Number(normalized);
+        return Number.isNaN(num) ? fallback : num;
+      }
+      return fallback;
+    }
+
+    async function scanSingleImage(img) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      let res;
+      try {
+        res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base64: img.base64,
+            mediaType: img.mediaType
+          }),
+          signal: controller.signal
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        if (fetchErr.name === 'AbortError') {
+          throw new Error(`Quá thời gian chờ (${REQUEST_TIMEOUT_MS / 1000}s)`);
+        }
+        throw new Error(`Lỗi kết nối mạng (${fetchErr.message})`);
+      }
+      clearTimeout(timeoutId);
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (payload.rawText) appendLog(`Phản hồi gốc từ AI: ${payload.rawText}`);
+        throw new Error(payload.error || `HTTP ${res.status}`);
+      }
+
+      const parsed = payload.data;
+      let rawItems, invoiceDate = '', meta = {};
+      if (Array.isArray(parsed)) {
+        rawItems = parsed;
+      } else {
+        rawItems = parsed.items || parsed.data || parsed.lines || [];
+        invoiceDate = toISODate(parsed.date);
+        const sp = parsed.supplier || parsed.seller || {};
+        meta = {
+          supplier: String((typeof sp === 'string' ? sp : sp.name) || '').trim(),
+          address: String(sp.address || '').trim(),
+          taxCode: String(sp.taxCode || sp.tax_code || sp.mst || '').trim(),
+          phone: String(sp.phone || '').trim(),
+          customer: String((typeof parsed.customer === 'object' ? parsed.customer?.name : parsed.customer) || parsed.buyer || '').trim()
+        };
+      }
+      if (!Array.isArray(rawItems)) rawItems = [];
+
+      const items = rawItems
+        .filter((item) => item && (item.name || item.amount || item.price))
+        .map((item) => {
+          const qty = parseSafeNumber(item.qty, 1) || 1;
+          const price = parseSafeNumber(item.price, 0);
+          const rawAmount = parseSafeNumber(item.amount, 0);
+          const finalPrice = price > 0 ? price : (rawAmount > 0 ? Math.round(rawAmount / qty) : 0);
+          return {
+            id: uid(),
+            date: toISODate(item.date) || invoiceDate,
+            name: String(item.name || '').trim(),
+            unit: String(item.unit || '').trim(),
+            qty,
+            price: finalPrice
+          };
+        });
+
+      const byDate = new Map();
+      items.forEach((it) => {
+        const key = it.date || invoiceDate || '';
+        if (!byDate.has(key)) byDate.set(key, []);
+        const { date, ...rest } = it;
+        byDate.get(key).push(rest);
+      });
+
+      return {
+        model: payload.model || '',
+        meta,
+        groups: [...byDate.entries()].map(([date, its]) => ({ date, items: its }))
+      };
+    }
+
+    function autofillHeader(meta) {
+      if (!meta) return;
+      const filled = [];
+      const map = { supplier: 'Tên NCC', address: 'Địa chỉ', taxCode: 'MST', phone: 'SĐT', customer: 'Khách hàng' };
+      Object.keys(map).forEach((k) => {
+        if (meta[k] && !String(header[k] || '').trim()) {
+          header[k] = meta[k];
+          filled.push(map[k]);
+        }
+      });
+      if (filled.length) {
+        if (!header.titleEdited) header.title = buildTitle();
+        fillHeaderInputs();
+        saveData();
+        appendLog(`↳ Tự điền thông tin công nợ: ${filled.join(', ')}`);
+      }
+    }
+
+    $('btnScan').addEventListener('click', async () => {
+      if (isScanning) return;
+      if (!images.length) {
+        toast('Vui lòng tải ít nhất 1 ảnh hóa đơn!', 'warn');
+        return;
+      }
+
+      let targets = images.filter((i) => i.status !== 'done');
+      if (targets.length === 0) {
+        images.forEach((i) => (i.status = 'pending'));
+        targets = [...images];
+      }
+
+      const wasEmpty = groups.length === 0;
+
+      isScanning = true;
+      $('btnScan').disabled = true;
+      updateScanButtonText();
+
+      const progWrap = $('progress');
+      const progBar = $('progressBar');
+      const progPercent = $('progressPercent');
+      const progLabel = $('progressLabel');
+
+      progWrap.classList.remove('hidden');
+      progBar.style.width = '0%';
+      progPercent.textContent = '0%';
+      progLabel.textContent = `Đang chuẩn bị quét ${targets.length} ảnh...`;
+
+      appendLog(`Bắt đầu quét ${targets.length} ảnh qua máy chủ Gemini...`);
+
+      let successCount = 0;
+      let totalAddedRows = 0;
+
+      for (let i = 0; i < targets.length; i++) {
+        const img = targets[i];
+        img.status = 'scanning';
+        renderImages();
+        progLabel.textContent = `Đang đọc ảnh ${i + 1}/${targets.length}: ${img.name}`;
+        appendLog(`[${i + 1}/${targets.length}] Đang gửi "${img.name}" (${fmtBytes(img.compSize)})...`);
+
+        try {
+          const result = await scanSingleImage(img);
+          const before = groups.length;
+          groups = groups.filter((g) => g.imageId !== img.id);
+          if (groups.length < before) appendLog(`↳ Thay thế dữ liệu quét cũ của "${img.name}"`);
+
+          let added = 0;
+          result.groups.forEach((g) => {
+            if (!g.items.length) return;
+            groups.push({ id: uid(), date: g.date, source: img.name, imageId: img.id, items: g.items });
+            added += g.items.length;
+            if (!g.date) appendLog(`⚠ "${img.name}": không đọc được ngày — hãy chọn ngày cho hóa đơn này`);
+          });
+          autofillHeader(result.meta);
+
+          img.status = 'done';
+          successCount++;
+          totalAddedRows += added;
+          appendLog(`✓ Hoàn tất "${img.name}" (+${added} dòng${result.model ? ` · ${result.model}` : ''})`);
+        } catch (err) {
+          img.status = 'error';
+          appendLog(`✗ Lỗi "${img.name}": ${err.message}`);
+        }
+
+        const pct = Math.round(((i + 1) / targets.length) * 100);
+        progBar.style.width = `${pct}%`;
+        progPercent.textContent = `${pct}%`;
+
+        renderImages();
+        renderGroups();
+        saveData();
+      }
+
+      if (wasEmpty && groups.length && !header.periodTouched) {
+        const firstDate = groups.map((g) => g.date).filter(Boolean).sort()[0];
+        if (firstDate) {
+          header.period = firstDate.slice(0, 7);
+          if (!header.titleEdited) header.title = buildTitle();
+          fillHeaderInputs();
+          saveData();
+          renderGroups();
+        }
+      }
+
+      isScanning = false;
+      $('btnScan').disabled = false;
+      updateScanButtonText();
+      progLabel.textContent = `Hoàn tất (${successCount}/${targets.length} ảnh thành công)`;
+
+      if (successCount > 0) {
+        toast(`✓ Quét xong ${successCount}/${targets.length} ảnh (+${totalAddedRows} dòng)`, 'ok');
+      } else {
+        toast('Quét thất bại, vui lòng xem Nhật ký xử lý!', 'error');
+      }
+    });
+
+    // =========================================================================
+    // STEP 3: HEADER INFO + PERSISTENCE
+    // =========================================================================
+    function buildTitle() {
+      const short = (header.customerShort || header.customer || '').trim().toUpperCase();
+      let t = 'CÔNG NỢ';
+      if (short) t += ` ${short}`;
+      if (header.period) {
+        const [y, m] = header.period.split('-').map(Number);
+        t += ` THÁNG ${m} NĂM ${y}`;
+      }
+      return t;
+    }
+
+    function fillHeaderInputs() {
+      document.querySelectorAll('.h-input').forEach((inp) => {
+        const k = inp.dataset.h;
+        if (document.activeElement !== inp) inp.value = header[k] || '';
+      });
+      $('onlyPeriod').checked = Boolean(header.onlyPeriod);
+    }
+
+    let saveTimer = null;
+    function saveData() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        try {
+          localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify({ header, groups }));
+        } catch (err) {
+          console.warn('Không lưu được dữ liệu:', err);
+        }
+      }, 300);
+    }
+
+    function loadData() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(DATA_STORAGE_KEY) || 'null');
+        if (saved && typeof saved === 'object') {
+          header = { ...header, ...(saved.header || {}) };
+          groups = Array.isArray(saved.groups) ? saved.groups : [];
+        }
+      } catch (_) {}
+      if (!header.period) header.period = todayISO().slice(0, 7);
+      if (!header.title) header.title = buildTitle();
+      fillHeaderInputs();
+    }
+
+    document.querySelectorAll('.h-input').forEach((inp) => {
+      inp.addEventListener('input', () => {
+        const k = inp.dataset.h;
+        header[k] = inp.value;
+        if (k === 'title') {
+          header.titleEdited = true;
+        } else if (!header.titleEdited && (k === 'customerShort' || k === 'customer' || k === 'period')) {
+          header.title = buildTitle();
+          $('hTitle').value = header.title;
+        }
+        if (k === 'period') {
+          header.periodTouched = true;
+          updatePeriodWarning();
+        }
+        saveData();
+      });
+    });
+
+    $('btnResetTitle').addEventListener('click', () => {
+      header.titleEdited = false;
+      header.title = buildTitle();
+      $('hTitle').value = header.title;
+      saveData();
+      toast('Đã tạo lại tiêu đề');
+    });
+
+    $('onlyPeriod').addEventListener('change', (e) => {
+      header.onlyPeriod = e.target.checked;
+      saveData();
+    });
+
+    // =========================================================================
+    // STEP 4: INVOICE GROUPS & LIVE CALC
+    // =========================================================================
+    const itemAmount = (it) => Math.round((Number(it.qty) || 0) * (Number(it.price) || 0) * 100) / 100;
+    const groupTotal = (g) => g.items.reduce((s, it) => s + itemAmount(it), 0);
+
+    function updatePeriodWarning() {
+      const warn = $('periodWarn');
+      const noDate = groups.filter((g) => !g.date).length;
+      const outside = header.period
+        ? groups.filter((g) => g.date && g.date.slice(0, 7) !== header.period).length
+        : 0;
+      const msgs = [];
+      if (noDate) msgs.push(`⚠ ${noDate} hóa đơn chưa có ngày — bấm vào ô ngày để chọn.`);
+      if (outside) {
+        const [y, m] = header.period.split('-').map(Number);
+        msgs.push(`⚠ ${outside} hóa đơn có ngày nằm ngoài kỳ tháng ${m}/${y} (đánh dấu viền cam).`);
+      }
+      warn.innerHTML = msgs.map((m) => `<div>${m}</div>`).join('');
+      warn.classList.toggle('hidden', msgs.length === 0);
+
+      groups.forEach((g) => {
+        const card = document.querySelector(`[data-gid="${g.id}"]`);
+        if (!card) return;
+        const bad = !g.date || (header.period && g.date.slice(0, 7) !== header.period);
+        card.classList.toggle('border-amber-400', Boolean(bad));
+        card.classList.toggle('border-slate-200', !bad);
+      });
+    }
+
+    function updateSummary() {
+      const itemCount = groups.reduce((s, g) => s + g.items.length, 0);
+      const total = groups.reduce((s, g) => s + groupTotal(g), 0);
+      $('totalSum').textContent = `${fmtNum(total)} đ`;
+      $('summaryCount').textContent = String(itemCount);
+      $('rowCountBadge').textContent = `${itemCount} dòng`;
+      $('groupCountBadge').textContent = `${groups.length} hóa đơn`;
+      groups.forEach((g) => {
+        const el = $(`sub-${g.id}`);
+        if (el) el.textContent = `${fmtNum(groupTotal(g))} đ`;
+      });
+    }
+
+    function itemRowHtml(it, idx) {
+      const cell = 'w-full min-h-[40px] px-2.5 py-1.5 rounded-lg border border-slate-300 md:border-transparent bg-white md:bg-transparent text-slate-900 text-sm focus:bg-blue-50 focus:outline-none focus:ring-2 md:focus:ring-1 focus:ring-blue-500';
+      const lbl = 'md:hidden block text-[11px] font-semibold text-slate-500 uppercase mb-1';
+      return `
+        <div data-iid="${it.id}" class="item-row grid grid-cols-6 md:grid-cols-[52px_minmax(0,1fr)_90px_80px_130px_150px_44px] gap-2 md:gap-0 items-center p-3 md:p-0 md:divide-x md:divide-slate-200 border-t border-slate-200 hover:bg-blue-50/30">
+          <div class="order-1 md:order-1 col-span-5 md:col-span-1 md:text-center">
+            <span class="inline-flex md:inline items-center px-2.5 md:px-0 py-0.5 rounded-full md:rounded-none text-xs font-bold bg-blue-100 md:bg-transparent text-[#1e40af] md:text-slate-500">${idx + 1}</span>
+          </div>
+          <div class="order-3 md:order-2 col-span-6 md:col-span-1 md:p-1">
+            <label class="${lbl}">Tên sản phẩm</label>
+            <input type="text" value="${escapeAttr(it.name)}" data-field="name" placeholder="Tên sản phẩm..." class="${cell}">
+          </div>
+          <div class="order-4 md:order-3 col-span-2 md:col-span-1 md:p-1">
+            <label class="${lbl}">ĐVT</label>
+            <input type="text" value="${escapeAttr(it.unit)}" data-field="unit" placeholder="ĐVT" class="${cell}">
+          </div>
+          <div class="order-5 md:order-4 col-span-2 md:col-span-1 md:p-1">
+            <label class="${lbl}">SL</label>
+            <input type="number" step="any" inputmode="decimal" value="${it.qty}" data-field="qty" class="${cell} text-right">
+          </div>
+          <div class="order-6 md:order-5 col-span-2 md:col-span-1 md:p-1">
+            <label class="${lbl}">Đơn giá</label>
+            <input type="number" step="any" inputmode="decimal" value="${it.price}" data-field="price" class="${cell} text-right">
+          </div>
+          <div class="order-7 md:order-6 col-span-6 md:col-span-1 md:px-2.5 flex md:block items-center justify-between bg-blue-50/70 md:bg-transparent rounded-lg px-3 py-2 md:py-0">
+            <span class="md:hidden text-[11px] font-semibold text-slate-500 uppercase">Thành tiền (SL × Đơn giá)</span>
+            <span id="amt-${it.id}" class="block text-right font-bold text-[#1e40af] text-sm">${fmtNum(itemAmount(it))}</span>
+          </div>
+          <div class="order-2 md:order-7 col-span-1 flex justify-end md:justify-center">
+            <button type="button" title="Xóa dòng" class="item-del w-9 h-9 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 font-bold transition">✕</button>
+          </div>
+        </div>`;
+    }
+
+    function renderGroups() {
+      const list = $('groupList');
+      list.innerHTML = '';
+      $('emptyState').classList.toggle('hidden', groups.length > 0);
+
+      groups.forEach((g, gIdx) => {
+        const hasImage = g.imageId && images.some((im) => im.id === g.imageId);
+        const card = document.createElement('div');
+        card.dataset.gid = g.id;
+        card.className = 'rounded-2xl border-2 border-slate-200 overflow-hidden bg-white';
+        card.innerHTML = `
+          <div class="bg-slate-50 px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2.5 border-b border-slate-200">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-[#2563eb] text-white">HĐ ${gIdx + 1}</span>
+            <label class="flex items-center gap-1.5 text-sm font-semibold text-slate-600">
+              <span>📅 Ngày</span>
+              <input type="date" value="${escapeAttr(g.date)}" class="g-date min-h-[40px] px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </label>
+            ${g.source ? `<span class="text-xs text-slate-400 truncate max-w-[180px]" title="${escapeAttr(g.source)}">từ ảnh: ${escapeAttr(g.source)}</span>` : ''}
+            <div class="ml-auto flex items-center gap-1.5">
+              ${hasImage ? '<button type="button" class="g-view min-h-[36px] px-2.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-700">🖼 Ảnh gốc</button>' : ''}
+              <button type="button" class="g-del min-h-[36px] px-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold">🗑 Xóa HĐ</button>
+            </div>
+          </div>
+          <div class="hidden md:grid grid-cols-[52px_minmax(0,1fr)_90px_80px_130px_150px_44px] bg-[#2563eb] text-white text-xs uppercase tracking-wide font-semibold divide-x divide-blue-500/40">
+            <div class="py-2 text-center">STT</div>
+            <div class="py-2 px-2.5">Tên sản phẩm</div>
+            <div class="py-2 px-2.5">ĐVT</div>
+            <div class="py-2 px-2.5 text-right">SL</div>
+            <div class="py-2 px-2.5 text-right">Đơn giá</div>
+            <div class="py-2 px-2.5 text-right">Thành tiền</div>
+            <div class="py-2 text-center">Xóa</div>
+          </div>
+          <div class="g-items">${g.items.map((it, i) => itemRowHtml(it, i)).join('')}</div>
+          ${g.items.length ? '' : '<div class="px-4 py-3 text-xs text-slate-400 border-t border-slate-200">Hóa đơn chưa có mặt hàng nào.</div>'}
+          <div class="px-3 sm:px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <button type="button" class="g-add min-h-[38px] px-3 rounded-lg bg-white border border-blue-200 hover:bg-blue-50 text-[#1e40af] text-xs sm:text-sm font-semibold">➕ Thêm mặt hàng</button>
+            <div class="text-sm font-semibold text-slate-700">Cộng HĐ: <span id="sub-${g.id}" class="text-[#1e40af] font-bold">0 đ</span></div>
+          </div>
+        `;
+
+        card.querySelector('.g-date').addEventListener('change', (e) => {
+          g.date = e.target.value;
+          saveData();
+          updatePeriodWarning();
+        });
+
+        card.querySelectorAll('.item-row').forEach((rowEl) => {
+          const it = g.items.find((x) => x.id === rowEl.dataset.iid);
+          rowEl.querySelectorAll('input[data-field]').forEach((inp) => {
+            inp.addEventListener('input', () => {
+              const f = inp.dataset.field;
+              it[f] = (f === 'qty' || f === 'price') ? (Number(inp.value) || 0) : inp.value;
+              if (f === 'qty' || f === 'price') {
+                $(`amt-${it.id}`).textContent = fmtNum(itemAmount(it));
+                updateSummary();
+              }
+              saveData();
+            });
+          });
+          rowEl.querySelector('.item-del').addEventListener('click', () => {
+            g.items = g.items.filter((x) => x.id !== it.id);
+            renderGroups();
+            saveData();
+            toast('Đã xóa 1 dòng');
+          });
+        });
+
+        card.querySelector('.g-add').addEventListener('click', () => {
+          const newItem = { id: uid(), name: '', unit: '', qty: 1, price: 0 };
+          g.items.push(newItem);
+          renderGroups();
+          saveData();
+          document.querySelector(`[data-iid="${newItem.id}"] input[data-field="name"]`)?.focus();
+        });
+
+        card.querySelector('.g-del').addEventListener('click', () => {
+          openConfirm(
+            `Xóa hóa đơn ${gIdx + 1}?`,
+            `Hóa đơn ngày ${fmtDateVN(g.date) || '(chưa có ngày)'} với ${g.items.length} mặt hàng sẽ bị xóa.`,
+            () => {
+              groups = groups.filter((x) => x.id !== g.id);
+              renderGroups();
+              saveData();
+              toast('Đã xóa hóa đơn');
+            }
+          );
+        });
+
+        card.querySelector('.g-view')?.addEventListener('click', () => {
+          const im = images.find((x) => x.id === g.imageId);
+          if (im) openLightbox(im.dataUrl, im.name);
+        });
+
+        list.appendChild(card);
+      });
+
+      updateSummary();
+      updatePeriodWarning();
+    }
+
+    function sortGroupsByDate(arr) {
+      return arr
+        .map((g, i) => ({ g, i }))
+        .sort((a, b) => {
+          if (a.g.date && b.g.date) return a.g.date < b.g.date ? -1 : a.g.date > b.g.date ? 1 : a.i - b.i;
+          if (a.g.date) return -1;
+          if (b.g.date) return 1;
+          return a.i - b.i;
+        })
+        .map((x) => x.g);
+    }
+
+    $('btnAddGroup').addEventListener('click', () => {
+      const lastDate = groups.length ? groups[groups.length - 1].date : '';
+      const g = { id: uid(), date: lastDate || todayISO(), source: '', imageId: null, items: [{ id: uid(), name: '', unit: '', qty: 1, price: 0 }] };
+      groups.push(g);
+      renderGroups();
+      saveData();
+      document.querySelector(`[data-gid="${g.id}"]`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      toast('Đã thêm hóa đơn mới — hãy chọn ngày và nhập mặt hàng');
+    });
+
+    $('btnSortDate').addEventListener('click', () => {
+      groups = sortGroupsByDate(groups);
+      renderGroups();
+      saveData();
+      toast('Đã sắp xếp hóa đơn theo ngày');
+    });
+
+    $('btnClearAll').addEventListener('click', () => {
+      if (!groups.length) {
+        toast('Bảng đang trống');
+        return;
+      }
+      openConfirm(
+        'Xóa toàn bộ bảng dữ liệu?',
+        `Bạn có chắc muốn xóa ${groups.length} hóa đơn hiện có không? (Thông tin NCC / khách hàng vẫn giữ lại)`,
+        () => {
+          groups = [];
+          images.forEach((i) => { if (i.status === 'done') i.status = 'pending'; });
+          renderImages();
+          renderGroups();
+          saveData();
+          toast('Đã xóa toàn bộ bảng dữ liệu!');
+        }
+      );
+    });
+
+    // =========================================================================
+    // EXCEL EXPORT — "CÔNG NỢ" TEMPLATE
+    // =========================================================================
+    function buildDebtWorkbook(XL, hdr, groupList) {
+      const FONT = { name: 'Times New Roman', sz: 12, color: { rgb: '000000' } };
+      const thin = { style: 'thin', color: { rgb: '000000' } };
+      const BORDER = { top: thin, bottom: thin, left: thin, right: thin };
+      const COLS = 7;
+
+      const ws = {};
+      const merges = [];
+      const addr = (r, c) => XL.utils.encode_cell({ r, c });
+      const put = (r, c, cell) => { ws[addr(r, c)] = cell; };
+      const sty = (extra = {}) => ({ font: { ...FONT }, alignment: { vertical: 'center' }, ...extra });
+      const cellStyle = (align, numFmt, bold) => {
+        const s = {
+          font: { ...FONT, bold: Boolean(bold) },
+          border: BORDER,
+          alignment: { horizontal: align, vertical: 'center' }
+        };
+        if (numFmt) s.numFmt = numFmt;
+        return s;
+      };
+
+      const headLines = [
+        `Tên nhà cung cấp: ${hdr.supplier || ''}`,
+        `Địa chỉ: ${hdr.address || ''}`,
+        `Mã số thuế: ${hdr.taxCode || ''}`,
+        `Số điện thoại: ${hdr.phone || ''}`,
+        `Khách hàng: ${hdr.customer || ''}`
+      ];
+      headLines.forEach((txt, r) => {
+        put(r, 0, { t: 's', v: txt, s: sty({ alignment: { horizontal: 'left', vertical: 'center' } }) });
+        merges.push({ s: { r, c: 0 }, e: { r, c: COLS - 1 } });
+      });
+
+      const TITLE_ROW = 6;
+      put(TITLE_ROW, 0, {
+        t: 's',
+        v: (hdr.title || 'CÔNG NỢ').toUpperCase(),
+        s: { font: { ...FONT, sz: 13, bold: true }, alignment: { horizontal: 'center', vertical: 'center' } }
+      });
+      merges.push({ s: { r: TITLE_ROW, c: 0 }, e: { r: TITLE_ROW, c: COLS - 1 } });
+
+      const HEAD_ROW = 7;
+      ['STT', 'NGÀY', 'TÊN SẢN PHẨM', 'ĐVT', 'SL', 'ĐƠN GIÁ', 'THÀNH TIỀN'].forEach((h, c) => {
+        put(HEAD_ROW, c, { t: 's', v: h, s: cellStyle('center', null, true) });
+      });
+
+      let r = HEAD_ROW + 1;
+      const firstDataRow = r;
+      let grand = 0;
+
+      groupList.forEach((g) => {
+        if (!g.items.length) return;
+        const start = r;
+        g.items.forEach((it, i) => {
+          const qty = Number(it.qty) || 0;
+          const price = Number(it.price) || 0;
+          const amount = Math.round(qty * price * 100) / 100;
+          grand += amount;
+          const excelRow = r + 1;
+
+          put(r, 0, { t: 'n', v: i + 1, s: cellStyle('center') });
+          if (i === 0 && g.date) {
+            put(r, 1, { t: 'n', v: isoToExcelSerial(g.date), z: 'd/m/yyyy', s: cellStyle('center', 'd/m/yyyy') });
+          } else {
+            put(r, 1, { t: 's', v: '', s: cellStyle('center') });
+          }
+          put(r, 2, { t: 's', v: it.name || '', s: cellStyle('left') });
+          put(r, 3, { t: 's', v: it.unit || '', s: cellStyle('center') });
+          put(r, 4, { t: 'n', v: qty, s: cellStyle('center') });
+          put(r, 5, { t: 'n', v: price, z: '#,##0', s: cellStyle('right', '#,##0') });
+          put(r, 6, { t: 'n', v: amount, f: `E${excelRow}*F${excelRow}`, z: '#,##0', s: cellStyle('right', '#,##0') });
+          r++;
+        });
+        if (r - start > 1) merges.push({ s: { r: start, c: 1 }, e: { r: r - 1, c: 1 } });
+      });
+      const lastDataRow = r - 1;
+
+      const totalStyle = cellStyle('center', '#,##0', true);
+      put(r, 0, { t: 's', v: 'TỔNG', s: totalStyle });
+      for (let c = 1; c <= 4; c++) put(r, c, { t: 's', v: '', s: totalStyle });
+      put(r, 5, {
+        t: 'n',
+        v: grand,
+        f: lastDataRow >= firstDataRow ? `SUM(G${firstDataRow + 1}:G${lastDataRow + 1})` : undefined,
+        z: '#,##0',
+        s: totalStyle
+      });
+      put(r, 6, { t: 's', v: '', s: totalStyle });
+      merges.push({ s: { r, c: 0 }, e: { r, c: 4 } });
+      merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
+
+      ws['!ref'] = XL.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: COLS - 1 } });
+      ws['!merges'] = merges;
+      ws['!cols'] = [
+        { wch: 10.83 },
+        { wch: 26.5 },
+        { wch: 52.5 },
+        { wch: 10.83 },
+        { wch: 9 },
+        { wch: 14 },
+        { wch: 36.33 }
+      ];
+      const rowsMeta = [];
+      rowsMeta[TITLE_ROW] = { hpt: 17 };
+      ws['!rows'] = rowsMeta;
+      ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
+
+      const wb = XL.utils.book_new();
+      XL.utils.book_append_sheet(wb, ws, 'Sheet1');
+      return { wb, grand, rowCount: lastDataRow - firstDataRow + 1 };
+    }
+
+    $('btnExport').addEventListener('click', () => {
+      if (typeof XLSX === 'undefined') {
+        toast('Thư viện xuất Excel chưa tải xong, vui lòng thử lại!', 'error');
+        return;
+      }
+
+      let list = sortGroupsByDate(groups.filter((g) => g.items.length));
+      if (header.onlyPeriod && header.period) {
+        list = list.filter((g) => !g.date || g.date.slice(0, 7) === header.period);
+      }
+      if (!list.length) {
+        toast('Không có dữ liệu để xuất Excel!', 'warn');
+        return;
+      }
+
+      try {
+        const { wb, grand, rowCount } = buildDebtWorkbook(XLSX, { ...header, title: header.title || buildTitle() }, list);
+        const baseName = (header.title || buildTitle() || 'CONG NO')
+          .toUpperCase()
+          .replace(/[\\/:*?"<>|]/g, '-')
+          .trim();
+        XLSX.writeFile(wb, `${baseName}.xlsx`);
+        toast(`✓ Đã xuất ${list.length} hóa đơn · ${rowCount} dòng · Tổng ${fmtNum(grand)} đ`, 'ok');
+      } catch (err) {
+        toast(`Lỗi xuất Excel: ${err.message}`, 'error');
+      }
+    });
+
+    // =========================================================================
+    // INITIALIZE
+    // =========================================================================
+    loadData();
+    renderImages();
+    renderGroups();
+  </script>
+</body>
+</html>
