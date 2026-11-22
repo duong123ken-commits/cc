@@ -62,7 +62,6 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
   responseMimeType: 'application/json',
   thinkingConfig: { thinkingBudget: 0 }
 }
-        }
       })
     });
 
