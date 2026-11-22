@@ -56,9 +56,12 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
             ]
           }
         ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json'
+      generationConfig: {
+  temperature: 0.1,
+  maxOutputTokens: 4096,
+  responseMimeType: 'application/json',
+  thinkingConfig: { thinkingBudget: 0 }
+}
         }
       })
     });
