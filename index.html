@@ -2,7 +2,15 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Quét Hóa Đơn">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <title>Quét Hóa Đơn → Excel</title>
   <!-- Google Font: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,28 +52,104 @@
       background: #cbd5e1;
       border-radius: 9999px;
     }
+
+    :root { color-scheme: light; }
+    html { scroll-behavior: smooth; }
+    button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    section[id] { scroll-margin-top: 18px; }
+    .mobile-step-nav { display: none; }
+    .mobile-dock { display: none; }
+    .offline-banner { border: 1px solid #fbbf24; background: #fffbeb; color: #92400e; }
+    @media (max-width: 767px) {
+      body { padding-bottom: calc(82px + env(safe-area-inset-bottom)); }
+      header { border-bottom-left-radius: 22px; border-bottom-right-radius: 22px; }
+      main { padding-bottom: 10px !important; }
+      main > section { padding: 14px !important; border-radius: 18px !important; }
+      #dropzone { padding: 18px 14px !important; }
+      #imageList { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+      .item-row input { min-height: 44px !important; }
+      .g-date { min-height: 44px !important; }
+      .g-view, .g-del, .g-add { min-height: 40px !important; }
+      #log { max-height: 132px; }
+      #toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
+      .mobile-step-nav {
+        position: sticky; top: 8px; z-index: 25;
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+        padding: 6px; border: 1px solid #e2e8f0; border-radius: 15px;
+        background: rgba(255,255,255,.94); backdrop-filter: blur(12px);
+        box-shadow: 0 5px 18px rgba(15,23,42,.06);
+      }
+      .mobile-step-nav a {
+        min-height: 38px; display: flex; align-items: center; justify-content: center;
+        border-radius: 10px; background: #f1f5f9; color: #475569;
+        font-size: 11px; font-weight: 700; text-decoration: none;
+      }
+      .mobile-step-nav a:active { transform: scale(.98); }
+      .mobile-dock {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+        padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+        border-top: 1px solid #e2e8f0; background: rgba(255,255,255,.96);
+        backdrop-filter: blur(14px); box-shadow: 0 -8px 28px rgba(15,23,42,.08);
+      }
+      .mobile-dock button {
+        min-width: 0; min-height: 50px; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 2px; border-radius: 13px;
+        background: #f1f5f9; color: #334155; font-size: 10px; font-weight: 700;
+      }
+      .mobile-dock button span:first-child { font-size: 17px; line-height: 1.1; }
+      .mobile-dock .dock-primary { background: #2563eb; color: #fff; }
+      .mobile-dock button:disabled { opacity: .42; }
+    }
+    @media (min-width: 768px) {
+      .mobile-step-nav, .mobile-dock { display: none !important; }
+    }
+
   </style>
 </head>
 <body class="bg-[#f1f5f9] text-[#0f172a] font-sans antialiased min-h-screen flex flex-col">
 
   <!-- HEADER -->
   <header class="bg-gradient-to-br from-[#2563eb] to-[#1e40af] text-white shadow-md rounded-b-2xl">
-    <div class="max-w-[1150px] mx-auto px-4 py-6 sm:py-7 text-center">
-      <h1 class="text-xl sm:text-2xl font-bold tracking-tight flex items-center justify-center gap-2">
-        <span>🧾</span>
-        <span>Quét Hóa Đơn → Excel</span>
-      </h1>
-      <p class="text-blue-100 text-xs sm:text-sm mt-1.5 font-medium">
-        Tải ảnh · AI đọc dữ liệu · Chọn ngày · Sửa trực tiếp · Xuất Excel công nợ theo mẫu
-      </p>
+    <div class="max-w-[1150px] mx-auto px-4 pt-4 pb-4 sm:py-7">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="w-11 h-11 shrink-0 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center text-2xl">🧾</span>
+          <div class="min-w-0">
+            <h1 class="text-lg sm:text-2xl font-bold tracking-tight">Quét Hóa Đơn → Excel</h1>
+            <p class="text-blue-100 text-[11px] sm:text-sm mt-1 font-medium">Chụp ảnh · AI đọc · Sửa dữ liệu · Xuất Excel</p>
+          </div>
+        </div>
+        <button type="button" id="btnInstall" class="hidden shrink-0 min-h-[40px] px-3 py-2 rounded-xl bg-white text-blue-700 text-xs sm:text-sm font-bold shadow-sm">
+          <span>⬇️</span> Cài app
+        </button>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] sm:text-xs">
+        <span id="connectionStatus" class="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-blue-50">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-300"></span> Đang kết nối
+        </span>
+        <span class="rounded-full bg-white/10 px-2.5 py-1 text-blue-100">Dữ liệu bảng lưu trên thiết bị</span>
+      </div>
+      <div id="installHint" class="hidden mt-3 rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-xs leading-relaxed text-white">
+        Trên iPhone/iPad: mở trang bằng Safari, nhấn nút Chia sẻ rồi chọn “Thêm vào Màn hình chính”.
+      </div>
     </div>
   </header>
 
   <!-- MAIN CONTAINER -->
   <main class="max-w-[1150px] w-full mx-auto px-3 sm:px-4 py-4 sm:py-6 flex-1 space-y-4 sm:space-y-5">
+    <div id="offlineBanner" class="offline-banner hidden rounded-xl px-3.5 py-3 text-xs sm:text-sm" role="status">
+      Bạn đang ngoại tuyến. Có thể xem và sửa dữ liệu đã lưu; quét hóa đơn bằng AI cần kết nối Internet.
+    </div>
+    <nav class="mobile-step-nav md:hidden" aria-label="Điều hướng nhanh">
+      <a href="#section-upload">Ảnh</a>
+      <a href="#section-scan">Quét AI</a>
+      <a href="#section-info">Thông tin</a>
+      <a href="#section-results">Kết quả</a>
+    </nav>
 
     <!-- STEP 1: UPLOAD IMAGES -->
-    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+    <section id="section-upload" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
       <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
         <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] flex items-center gap-1.5">
           <span>📸</span>
@@ -130,7 +214,7 @@
     </section>
 
     <!-- STEP 2: AI SCANNING -->
-    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+    <section id="section-scan" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
       <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] pb-3 mb-4 border-b border-slate-100 flex items-center gap-1.5">
         <span>🤖</span>
         <span>Bước 2: Quét Ảnh Bằng AI</span>
@@ -172,7 +256,7 @@
     </section>
 
     <!-- STEP 3: HEADER INFO (TOP OF EXCEL FILE) -->
-    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+    <section id="section-info" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
         <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] flex items-center gap-1.5">
           <span>📋</span>
@@ -230,7 +314,7 @@
     </section>
 
     <!-- STEP 4: EDIT & EXPORT -->
-    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+    <section id="section-results" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
       <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-100">
         <h2 class="text-base sm:text-[1.05rem] font-bold text-[#2563eb] flex items-center gap-1.5">
           <span>✏️</span>
@@ -292,6 +376,14 @@
     </section>
 
   </main>
+
+  <!-- MOBILE QUICK ACTIONS -->
+  <div class="mobile-dock md:hidden" role="group" aria-label="Thao tác nhanh">
+    <button type="button" id="btnDockCamera"><span>📷</span><span>Chụp ảnh</span></button>
+    <button type="button" id="btnDockFiles"><span>🖼️</span><span>Thư viện</span></button>
+    <button type="button" id="btnDockScan" class="dock-primary" disabled><span>🔍</span><span>Quét AI</span></button>
+    <button type="button" id="btnDockExport" disabled><span>📊</span><span>Xuất Excel</span></button>
+  </div>
 
   <!-- FOOTER -->
   <footer class="text-center text-slate-400 text-xs py-6 px-4">
@@ -382,6 +474,71 @@
     const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     const $ = (id) => document.getElementById(id);
     const fmtNum = (n) => Number(n || 0).toLocaleString('vi-VN');
+
+    // =========================================================================
+    // PWA: INSTALL, OFFLINE STATUS & APP SHELL
+    // =========================================================================
+    let deferredInstallPrompt = null;
+    const installButton = $('btnInstall');
+    const installHint = $('installHint');
+    const isIOSDevice = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+    function updateConnectionStatus() {
+      const status = $('connectionStatus');
+      const banner = $('offlineBanner');
+      if (!navigator.onLine) {
+        status.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-300"></span> Ngoại tuyến';
+        status.classList.add('bg-amber-400/20');
+        banner.classList.remove('hidden');
+      } else {
+        status.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-300"></span> Đang kết nối';
+        status.classList.remove('bg-amber-400/20');
+        banner.classList.add('hidden');
+      }
+    }
+
+    updateConnectionStatus();
+    window.addEventListener('online', updateConnectionStatus);
+    window.addEventListener('offline', updateConnectionStatus);
+
+    if (!isStandalone && isIOSDevice) installButton.classList.remove('hidden');
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      if (!isStandalone) installButton.classList.remove('hidden');
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      installButton.classList.add('hidden');
+      installHint.classList.add('hidden');
+      toast('Đã cài Quét Hóa Đơn vào thiết bị', 'ok');
+    });
+    installButton.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice?.outcome === 'accepted') installButton.classList.add('hidden');
+        deferredInstallPrompt = null;
+        return;
+      }
+      if (isIOSDevice) {
+        installHint.classList.toggle('hidden');
+        if (!installHint.classList.contains('hidden')) installHint.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+      toast('Mở menu trình duyệt và chọn “Cài đặt ứng dụng” nếu tùy chọn này khả dụng.');
+    });
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((error) => {
+          console.warn('Không đăng ký được service worker:', error);
+        });
+      });
+    }
+
 
     const fmtBytes = (bytes) => {
       if (!bytes || bytes < 1024) return `${bytes || 0} B`;
@@ -619,6 +776,8 @@
       } else {
         $('btnScanText').textContent = `Quét Lại Tất Cả (${total} ảnh)`;
       }
+      const dockScan = $('btnDockScan');
+      if (dockScan) dockScan.disabled = isScanning || total === 0;
     }
 
     function renderImages() {
@@ -1057,6 +1216,8 @@
         const el = $(`sub-${g.id}`);
         if (el) el.textContent = `${fmtNum(groupTotal(g))} đ`;
       });
+      const dockExport = $('btnDockExport');
+      if (dockExport) dockExport.disabled = groups.length === 0;
     }
 
     function itemRowHtml(it, idx) {
@@ -1383,6 +1544,13 @@
         toast(`Lỗi xuất Excel: ${err.message}`, 'error');
       }
     });
+
+
+    // Mobile quick actions mirror the existing desktop controls.
+    $('btnDockCamera').addEventListener('click', () => cameraInput.click());
+    $('btnDockFiles').addEventListener('click', () => fileInput.click());
+    $('btnDockScan').addEventListener('click', () => $('btnScan').click());
+    $('btnDockExport').addEventListener('click', () => $('btnExport').click());
 
     // =========================================================================
     // INITIALIZE
