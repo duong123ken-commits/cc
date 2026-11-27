@@ -162,6 +162,7 @@
       <button type="button" id="simpleFiles" class="w-full rounded-xl border-2 border-blue-300 text-blue-800 font-bold py-3">🖼 CHỌN ẢNH CÓ SẴN</button>
       <div class="rounded-xl bg-slate-50 p-3" role="status" aria-live="polite"><p id="simpleStatus" class="text-lg font-semibold">Chụp hoặc chọn ảnh để bắt đầu.</p><p id="simpleTotal" class="text-2xl font-bold text-blue-800">0 đ</p><p id="simpleWarning" class="text-amber-800 font-medium"></p></div>
       <button type="button" id="simpleRetry" hidden class="w-full rounded-xl bg-amber-100 text-amber-900 font-bold">QUÉT LẠI ẢNH LỖI</button>
+      <button type="button" id="simpleRescan" hidden class="w-full rounded-xl border-2 border-blue-300 text-blue-800 font-bold">QUÉT LẠI TẤT CẢ ẢNH</button>
       <button type="button" id="simpleReview" class="w-full rounded-xl border-2 border-slate-300 font-bold">Xem và sửa kết quả</button>
       <button type="button" id="simpleExport" disabled class="w-full rounded-xl bg-green-700 text-white font-bold py-5 disabled:opacity-40">📥 XUẤT EXCEL</button>
       <button type="button" id="simpleClear" class="w-full rounded-xl border border-slate-300 text-slate-700">Lập bảng mới</button>
@@ -356,6 +357,10 @@
         <p class="text-xs mt-1">Hãy quét ảnh ở Bước 2 hoặc bấm "➕ Thêm Hóa Đơn" để nhập thủ công</p>
       </div>
 
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <button type="button" id="resultAddPhotos" class="min-h-[52px] rounded-xl bg-blue-700 text-white font-bold px-2">+ Thêm ảnh</button>
+        <button type="button" id="resultRescan" class="min-h-[52px] rounded-xl border-2 border-blue-300 text-blue-800 font-bold px-2">Quét lại ảnh</button>
+      </div>
       <!-- Invoice groups -->
       <div id="groupList" class="space-y-4"></div>
 
@@ -509,7 +514,7 @@
       [/\b(?:lay['’]?s|lays)\b/giu, "Lay's"],
       [/\bpoca\b/giu, 'Poca'],
       [/\bcalbee\b/giu, 'Calbee'],
-      [/\b(?:ponnie|ponni)\b/giu, 'Ponnie'],
+      [/\b(?:ponnie|ponni|pönnie)\b/giu, 'Ponnie'],
       [/\boreo\b/giu, 'Oreo'],
       [/\bkit[\s-]*kat\b/giu, 'KitKat'],
       [/\bcosy\b/giu, 'Cosy'],
@@ -534,9 +539,16 @@
     }
     function normalizeProductName(value, useLearned = true) {
       let name = String(value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
-      if (useLearned && learnedNames.has(productKey(name))) return learnedNames.get(productKey(name));
+      if (useLearned && learnedNames.has(productKey(name))) name = learnedNames.get(productKey(name));
       for (const [pattern, brand] of PRODUCT_BRANDS) name = name.replace(pattern, brand);
       name = name.replace(/(mực\s+)dento\b/giu, '$1Bento');
+      name = name.replace(/^x\s*\.\s*x\s*\.?\s*/iu, 'Xúc xích ');
+      if (/^xúc xích\b/iu.test(name)) {
+        name = name.replace(/\b(?:lonnie|lonni|ponie)\b/giu, 'Ponnie');
+        name = name.replace(/(?:heo\s+)?cao\s+bồi/giu, 'Heo Cao Bồi');
+        name = name.replace(/(?:cuộn|cuốn)\s+(?:r\s*\.?\s*b\.?|rong\s+biển)(?=\s|$)/giu, 'cuộn rong biển');
+        // The variant "Đức" is not verified: keep it visible for review.
+      }
       name = name.replace(/ph[oô]\s*mai/giu, 'phô mai');
       return capitalizeFirst(name);
     }
@@ -1103,16 +1115,16 @@
       }
     }
 
-    $('btnScan').addEventListener('click', async () => {
+    async function runScan(selectedIds = null) {
       if (isScanning) return;
       if (!images.length) {
         toast('Vui lòng tải ít nhất 1 ảnh hóa đơn!', 'warn');
         return;
       }
 
-      let targets = images.filter((i) => i.status !== 'done');
+      let targets = selectedIds ? images.filter(i => selectedIds.includes(i.id)) : images.filter((i) => i.status !== 'done');
       if (targets.length === 0) {
-        if (simpleMode) return;
+        if (simpleMode || selectedIds) return;
         images.forEach((i) => (i.status = 'pending'));
         targets = [...images];
       }
@@ -1147,6 +1159,7 @@
 
         try {
           const result = await scanSingleImage(img);
+          if (!result.groups.some(g => g.items.length)) throw new Error('Không đọc được mặt hàng; giữ kết quả cũ');
           const before = groups.length;
           groups = groups.filter((g) => g.imageId !== img.id);
           if (groups.length < before) appendLog(`↳ Thay thế dữ liệu quét cũ của "${img.name}"`);
@@ -1201,7 +1214,14 @@
       } else {
         toast('Quét thất bại, vui lòng xem Nhật ký xử lý!', 'error');
       }
-    });
+    }
+    $('btnScan').addEventListener('click', () => runScan());
+    function rescanImages(ids) {
+      if (isScanning || isAdding) return toast('Đang đọc hóa đơn, vui lòng đợi xong.');
+      if (!ids.length) return toast('Hãy thêm ảnh gốc trước khi quét lại.', 'warn');
+      if (!window.confirm('Quét lại ảnh đã chọn? Kết quả mới sẽ thay thế kết quả cũ nếu đọc thành công.')) return;
+      runScan(ids);
+    }
 
     // =========================================================================
     // STEP 3: HEADER INFO + PERSISTENCE
@@ -1410,6 +1430,7 @@
             </label>
             ${g.source ? `<span class="text-xs text-slate-400 truncate max-w-[180px]" title="${escapeAttr(g.source)}">từ ảnh: ${escapeAttr(g.source)}</span>` : ''}
             <div class="ml-auto flex items-center gap-1.5">
+              ${hasImage ? '<button type="button" class="g-rescan min-h-[44px] px-3 rounded-lg bg-blue-100 text-blue-800 text-sm font-bold">Quét lại</button>' : ''}
               ${hasImage ? '<button type="button" class="g-view min-h-[36px] px-2.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-700">🖼 Ảnh gốc</button>' : ''}
               <button type="button" class="g-del min-h-[36px] px-2.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold">🗑 Xóa HĐ</button>
             </div>
@@ -1438,6 +1459,7 @@
           ok.onclick = () => { g.warnings=[]; renderGroups(); saveData(); };
           note.appendChild(ok); card.prepend(note);
         }
+        card.querySelector('.g-rescan')?.addEventListener('click', () => rescanImages([g.imageId]));
         card.querySelector('.g-date').addEventListener('change', (e) => {
           g.date = e.target.value;
           saveData();
@@ -1446,7 +1468,7 @@
 
         card.querySelectorAll('.item-row').forEach((rowEl) => {
           const it = g.items.find((x) => x.id === rowEl.dataset.iid);
-          if ((g.warnings || []).some(w => String(w).startsWith('Dòng ' + (g.items.indexOf(it)+1) + ':'))) rowEl.classList.add('ocr-review');
+          if ((g.warnings || []).some(w => String(w).startsWith('Dòng ' + (g.items.indexOf(it)+1) + ':')) || /^xúc xích\s+đức\s+heo cao bồi/iu.test(it.name)) rowEl.classList.add('ocr-review');
           rowEl.querySelectorAll('input[data-field]').forEach((inp) => {
             let previous = inp.value;
             inp.addEventListener('focus', () => { previous = inp.value; });
@@ -1725,7 +1747,7 @@
       $('simplePeriod').value=header.period;
     }
     function refreshProductSuggestions() {
-      const values=new Set([...learnedNames.values(),...groups.flatMap(g=>g.items.map(it=>it.name)).filter(Boolean)]);
+      const values=new Set(['Xúc xích Ponnie','Xúc xích Heo Cao Bồi','Xúc xích lắc Heo Cao Bồi','Xúc xích Heo Cao Bồi cuộn rong biển',...learnedNames.values(),...groups.flatMap(g=>g.items.map(it=>it.name)).filter(Boolean)]);
       const list=$('knownProductNames'); list.textContent='';
       for(const value of [...values].slice(0,1000)){const opt=document.createElement('option');opt.value=value;list.appendChild(opt);}
     }
@@ -1734,9 +1756,12 @@
       const busy=isScanning||isAdding>0;
       $('simpleStatus').textContent=isAdding?'Đang chuẩn bị ảnh…':isScanning?'Đang đọc hóa đơn… ('+done+'/'+images.length+' ảnh xong)':failed?done+' ảnh đã đọc · '+failed+' ảnh cần quét lại':pending?pending+' ảnh chưa đọc':groups.length?groups.length+' hóa đơn đã lưu':'Chụp hoặc chọn ảnh để bắt đầu.';
       $('simpleTotal').textContent=fmtNum(groups.reduce((sum,g)=>sum+groupTotal(g),0))+' đ';
-      const review=groups.filter(g=>(g.warnings||[]).length||!g.date||(header.period&&g.date.slice(0,7)!==header.period)).length;
+      const review=groups.filter(g=>(g.warnings||[]).length||g.items.some(it=>/^xúc xích\s+đức\s+heo cao bồi/iu.test(it.name))||!g.date||(header.period&&g.date.slice(0,7)!==header.period)).length;
       $('simpleWarning').textContent=review?review+' hóa đơn cần kiểm tra lại.':'';
       $('simpleRetry').hidden=busy||!(failed||pending);
+      $('simpleRescan').hidden=busy||!images.length;
+      $('resultRescan').disabled=busy||!images.length;
+      $('resultAddPhotos').disabled=busy;
       $('simpleExport').disabled=busy||!groups.some(g=>g.items.length);
       $('simpleClear').disabled=busy;
     }
@@ -1764,6 +1789,9 @@
     $('simpleCamera').onclick=()=>cameraInput.click();
     $('simpleFiles').onclick=()=>fileInput.click();
     $('simpleRetry').onclick=()=>$('btnScan').click();
+    $('simpleRescan').onclick=()=>rescanImages(images.map(i=>i.id));
+    $('resultRescan').onclick=()=>rescanImages(images.map(i=>i.id));
+    $('resultAddPhotos').onclick=()=>fileInput.click();
     $('simpleReview').onclick=()=>{
       const opened=$('section-results').classList.toggle('review-open');
       $('simpleReview').textContent=opened?'Ẩn chi tiết kết quả':'Xem và sửa kết quả';
