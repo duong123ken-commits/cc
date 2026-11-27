@@ -461,7 +461,6 @@
     // =========================================================================
     const MAX_IMAGE_DIM = 2400;
     const JPEG_QUALITY = 0.94;
-    const REQUEST_TIMEOUT_MS = 90000;
     const DATA_STORAGE_KEY = 'hoa_don_data_v2';
 
     let images = [];
@@ -920,35 +919,44 @@
     }
 
     async function scanSingleImage(img) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-      let res;
-      try {
-        res = await fetch('/api/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            base64: img.base64,
-            mediaType: img.mediaType
-          }),
-          signal: controller.signal
-        });
-      } catch (fetchErr) {
-        clearTimeout(timeoutId);
-        if (fetchErr.name === 'AbortError') {
-          throw new Error(`Quá thời gian chờ (${REQUEST_TIMEOUT_MS / 1000}s)`);
+      let payload;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const controller = new AbortController();
+        let timeoutId;
+        try {
+          payload = await Promise.race([
+            (async () => {
+              const res = await fetch('/api/scan', {
+                method: 'POST',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base64: img.base64, mediaType: img.mediaType, retry: attempt > 0 }),
+                signal: controller.signal
+              });
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok || !body.data) {
+                const err = new Error(body.error || `HTTP ${res.status}: máy chủ chưa trả dữ liệu OCR`);
+                err.permanent = [400, 401, 403, 405, 413].includes(res.status);
+                throw err;
+              }
+              return body;
+            })(),
+            new Promise((_, reject) => {
+              timeoutId = setTimeout(() => {
+                controller.abort();
+                reject(new Error('Máy chủ chưa phản hồi sau 55 giây'));
+              }, 55000);
+            })
+          ]);
+          break;
+        } catch (err) {
+          if (attempt === 1 || err.permanent) throw err;
+          appendLog(`↻ "${img.name}": ${err.message}. Tự kết nối lại và đổi model dự phòng...`);
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        } finally {
+          clearTimeout(timeoutId);
         }
-        throw new Error(`Lỗi kết nối mạng (${fetchErr.message})`);
       }
-      clearTimeout(timeoutId);
-
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (payload.rawText) appendLog(`Phản hồi gốc từ AI: ${payload.rawText}`);
-        throw new Error(payload.error || `HTTP ${res.status}`);
-      }
-
       if (Array.isArray(payload.warnings)) payload.warnings.forEach(w => appendLog(`⚠ ${img.name}: ${w}`));
       const parsed = payload.data;
       let rawItems, invoiceDate = '', meta = {};
