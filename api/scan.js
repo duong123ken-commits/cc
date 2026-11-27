@@ -28,11 +28,15 @@ QUY TẮC BẮT BUỘC:
   "supplier": {"name": "tên người bán / nhà cung cấp", "address": "địa chỉ người bán", "taxCode": "mã số thuế người bán", "phone": "số điện thoại người bán"},
   "customer": "tên người mua / khách hàng",
   "date": "DD/MM/YYYY",
+  "invoiceTotal": 0,
   "items": [{"date": "DD/MM/YYYY", "name": "Tên sản phẩm", "unit": "ĐVT", "qty": 1, "price": 0, "amount": 0}]
 }
 4. Trường nào không đọc được thì để "" (chuỗi rỗng). "date" trong từng item để "" nếu trùng ngày hóa đơn.
 5. Giá trị số (qty, price, amount) là số thuần, không có dấu chấm/phẩy ngăn cách nghìn và không có ký hiệu tiền tệ.
-6. Không đưa dòng tổng cộng, thuế, chiết khấu vào "items".`;
+6. Không đưa dòng tổng cộng, thuế, chiết khấu vào "items".
+7. Đọc từng hàng theo STT, đối chiếu đúng cột số lượng, đơn giá, thành tiền; bỏ dấu tick và đường gạch chéo. Không bỏ hàng có chữ viết tay.
+8. invoiceTotal là tổng ghi trên giấy, không phải tổng tự tính. Nếu không đọc được để null. Kiểm tra qty × price với amount và tổng các dòng với invoiceTotal; đọc lại vùng sai lệch trước khi trả kết quả. Không tự sửa số rõ ràng để ép khớp tổng.
+9. Giữ nguyên tên hàng, quy cách, đơn vị và ngày ở cuối phiếu; không bịa thông tin.`;
 
     const userPrompt = `Hãy đọc ảnh hóa đơn này và trích xuất thông tin người bán, người mua, ngày hóa đơn và TOÀN BỘ các dòng sản phẩm/dịch vụ theo đúng cấu trúc object JSON đã quy định.
 Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính price = amount / qty. Chỉ trả về object JSON thuần.`;
@@ -47,7 +51,7 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
       }],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseMimeType: 'application/json'
       }
     };
@@ -134,7 +138,26 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
       });
     }
 
-    return res.status(200).json({ data: parsed, model });
+    const warnings = [];
+    const items = Array.isArray(parsed) ? parsed : parsed.items;
+    if (Array.isArray(items)) {
+      let sum = 0;
+      let complete = true;
+      items.forEach((item, i) => {
+        const valid = v => v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v));
+        if (!valid(item.qty) || !valid(item.price) || !valid(item.amount)) {
+          complete = false;
+          warnings.push('Dòng ' + (i+1) + ': thiếu số liệu, cần kiểm tra');
+          return;
+        }
+        sum += Number(item.amount);
+        if (Math.abs(Number(item.qty)*Number(item.price)-Number(item.amount)) > 1)
+          warnings.push('Dòng ' + (i+1) + ': số lượng × đơn giá không khớp thành tiền');
+      });
+      if (complete && parsed.invoiceTotal != null && parsed.invoiceTotal !== '' && Number(parsed.invoiceTotal)>0 && Math.abs(sum-Number(parsed.invoiceTotal))>1)
+        warnings.push('Tổng các dòng ' + sum + ' khác tổng ghi trên phiếu ' + parsed.invoiceTotal);
+    }
+    return res.status(200).json({ data: parsed, model, warnings });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Lỗi xử lý phía server' });
   }
