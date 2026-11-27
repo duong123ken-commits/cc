@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
-  const models = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+  const models = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash'];
   let model = models[0];
 
   if (!apiKey) {
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   try {
     const { base64, mediaType, retry } = req.body || {};
-    const orderedModels = retry === true ? [models[1], models[2], models[0]] : models;
+    const orderedModels = models;
     console.info('[OCR] request started', { bytes: typeof base64 === 'string' ? base64.length : 0, retry: retry === true });
     if (!base64 || !mediaType) {
       return res.status(400).json({ error: 'Thiếu dữ liệu ảnh (base64 hoặc mediaType).' });
@@ -59,67 +59,8 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
       }
     };
 
-    let response;
-    let data = {};
-    let lastStatus = 503;
-    let lastMessage = 'Gemini đang quá tải';
-    const retryable = new Set([408, 429, 500, 502, 503, 504, 404]);
-    const deadline = Date.now() + 45000;
-
-    for (const candidate of orderedModels) {
-      model = candidate;
-      const remaining = deadline - Date.now();
-      if (remaining < 2000) break;
-      const controller = new AbortController();
-      let timer;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-      const requestBody = { ...payload, generationConfig: { ...payload.generationConfig,
-        ...(model === models[0] ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } };
-      response = undefined;
-      data = {};
-      const started = Date.now();
-      try {
-        const result = await Promise.race([
-          (async () => {
-            const upstream = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-              body: JSON.stringify(requestBody),
-              signal: controller.signal
-            });
-            return { upstream, json: await upstream.json() };
-          })(),
-          new Promise((_, reject) => {
-            timer = setTimeout(() => { controller.abort(); reject(new Error('OCR_TIMEOUT')); }, Math.min(22000, remaining - 500));
-          })
-        ]);
-        response = result.upstream;
-        data = result.json;
-        console.info('[OCR] upstream', { model, status: response.status, ms: Date.now() - started });
-        if (response.ok && data?.candidates?.[0]?.content?.parts?.some(p => p.text && !p.thought)) break;
-        lastStatus = response.ok ? 502 : response.status;
-        lastMessage = data?.error?.message || 'Gemini không trả về dữ liệu OCR';
-        if (!retryable.has(lastStatus) && !(lastStatus === 400 && /thinking/i.test(lastMessage))) {
-          return res.status(lastStatus).json({ error: `Gemini API lỗi: ${lastMessage}` });
-        }
-        response = undefined;
-      } catch (err) {
-        response = undefined;
-        lastStatus = err.message === 'OCR_TIMEOUT' || err.name === 'AbortError' ? 504 : 503;
-        lastMessage = lastStatus === 504 ? 'Gemini phản hồi quá chậm' : 'Không kết nối được Gemini';
-        console.warn('[OCR] upstream failure', { model, status: lastStatus, ms: Date.now() - started });
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    if (!response?.ok) {
-      return res.status(lastStatus === 404 || lastStatus === 400 ? 503 : lastStatus).json({
-        error: `Gemini chưa thể quét ảnh (${lastStatus}): ${lastMessage}`
-      });
-    }
-
-    const rawText = data?.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map((p) => p.text || '').join('') || '';
+    function inspect(data, model) {
+      const rawText = data?.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map((p) => p.text || '').join('') || '';
     const cleaned = rawText.replace(/```json|```/gi, '').trim();
 
     let parsed = null;
@@ -144,18 +85,17 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
     }
 
     if (!parsed || typeof parsed !== 'object') {
-      return res.status(502).json({
-        error: 'AI không trả về JSON hợp lệ',
-        rawText: rawText || '(Rỗng)'
-      });
+      return null;
     }
 
     const warnings = [];
     const items = Array.isArray(parsed) ? parsed : parsed.items;
+    if (!Array.isArray(items) || !items.length || items.some(it => !it || typeof it !== 'object')) return null;
     if (Array.isArray(items)) {
       let sum = 0;
       let complete = true;
       items.forEach((item, i) => {
+        if (!String(item.name || '').trim()) warnings.push('Dòng ' + (i+1) + ': thiếu tên hàng');
         const valid = v => v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v));
         if (!valid(item.qty) || !valid(item.price) || !valid(item.amount)) {
           complete = false;
@@ -169,7 +109,84 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
       if (complete && parsed.invoiceTotal != null && parsed.invoiceTotal !== '' && Number(parsed.invoiceTotal)>0 && Math.abs(sum-Number(parsed.invoiceTotal))>1)
         warnings.push('Tổng các dòng ' + sum + ' khác tổng ghi trên phiếu ' + parsed.invoiceTotal);
     }
-    return res.status(200).json({ data: parsed, model, warnings });
+      if (parsed.invoiceTotal == null || parsed.invoiceTotal === '' || !(Number(parsed.invoiceTotal) > 0)) warnings.push('Không đọc được tổng ghi trên hóa đơn');
+      if (!parsed.date && !items.every(it => it.date)) warnings.push('Chưa đọc được ngày hóa đơn');
+      return { data: parsed, model, warnings, count: items.length };
+    }
+
+    let best = null;
+    let response;
+    let data = {};
+    let lastStatus = 503;
+    let lastMessage = 'Gemini đang quá tải';
+    const retryable = new Set([408, 429, 500, 502, 503, 504, 404]);
+    const deadline = Date.now() + 40000;
+
+    for (const candidate of orderedModels) {
+      model = candidate;
+      const remaining = deadline - Date.now();
+      if (remaining < 2000) break;
+      const controller = new AbortController();
+      let timer;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      const requestBody = { ...payload, generationConfig: { ...payload.generationConfig,
+        ...(model === 'gemini-3.8-flash' ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } };
+      response = undefined;
+      data = {};
+      const started = Date.now();
+      try {
+        const result = await Promise.race([
+          (async () => {
+            const upstream = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+              body: JSON.stringify(requestBody),
+              signal: controller.signal
+            });
+            return { upstream, json: await upstream.json() };
+          })(),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => { controller.abort(); reject(new Error('OCR_TIMEOUT')); }, Math.min(model === models[0] ? 12000 : 13000, remaining - 500));
+          })
+        ]);
+        response = result.upstream;
+        data = result.json;
+        console.info('[OCR] upstream', { model, status: response.status, ms: Date.now() - started });
+        if (response.ok) {
+          const checked = inspect(data, model);
+          if (checked) {
+            if (!best || (checked.count >= best.count && checked.warnings.length < best.warnings.length)) best = checked;
+            if (!best.warnings.length) break;
+          }
+        }
+        lastStatus = response.ok ? 502 : response.status;
+        lastMessage = data?.error?.message || 'Gemini không trả về dữ liệu OCR';
+        if (!retryable.has(lastStatus) && !(lastStatus === 400 && /thinking/i.test(lastMessage))) {
+          if (best) break;
+          return res.status(lastStatus).json({ error: `Gemini API lỗi: ${lastMessage}` });
+        }
+        response = undefined;
+      } catch (err) {
+        response = undefined;
+        lastStatus = err.message === 'OCR_TIMEOUT' || err.name === 'AbortError' ? 504 : 503;
+        lastMessage = lastStatus === 504 ? 'Gemini phản hồi quá chậm' : 'Không kết nối được Gemini';
+        console.warn('[OCR] upstream failure', { model, status: lastStatus, ms: Date.now() - started });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    if (best) {
+      console.info('[OCR] completed', { model: best.model, rows: best.count, warnings: best.warnings.length });
+      return res.status(200).json({ data: best.data, model: best.model, warnings: best.warnings });
+    }
+    {
+      return res.status(lastStatus === 404 || lastStatus === 400 ? 503 : lastStatus).json({
+        error: `Gemini chưa thể quét ảnh (${lastStatus}): ${lastMessage}`
+      });
+    }
+
+
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Lỗi xử lý phía server' });
   }
