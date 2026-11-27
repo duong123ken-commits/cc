@@ -14,7 +14,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { base64, mediaType } = req.body || {};
+    const { base64, mediaType, retry } = req.body || {};
+    const orderedModels = retry === true ? [models[1], models[2], models[0]] : models;
+    console.info('[OCR] request started', { bytes: typeof base64 === 'string' ? base64.length : 0, retry: retry === true });
     if (!base64 || !mediaType) {
       return res.status(400).json({ error: 'Thiếu dữ liệu ảnh (base64 hoặc mediaType).' });
     }
@@ -35,7 +37,7 @@ QUY TẮC BẮT BUỘC:
 5. Giá trị số (qty, price, amount) là số thuần, không có dấu chấm/phẩy ngăn cách nghìn và không có ký hiệu tiền tệ.
 6. Không đưa dòng tổng cộng, thuế, chiết khấu vào "items".
 7. Đọc từng hàng theo STT, đối chiếu đúng cột số lượng, đơn giá, thành tiền; bỏ dấu tick và đường gạch chéo. Không bỏ hàng có chữ viết tay.
-8. invoiceTotal là tổng ghi trên giấy, không phải tổng tự tính. Nếu không đọc được để null. Kiểm tra qty × price với amount và tổng các dòng với invoiceTotal; đọc lại vùng sai lệch trước khi trả kết quả. Không tự sửa số rõ ràng để ép khớp tổng.
+8. invoiceTotal là tổng ghi trên giấy, không phải tổng tự tính. Nếu không đọc được để null. Đọc chính xác số liệu trên giấy; việc kiểm tra phép tính sẽ do máy chủ thực hiện. Không tự sửa số rõ ràng để ép khớp tổng.
 9. Giữ nguyên tên hàng, quy cách, đơn vị và ngày ở cuối phiếu; không bịa thông tin.`;
 
     const userPrompt = `Hãy đọc ảnh hóa đơn này và trích xuất thông tin người bán, người mua, ngày hóa đơn và TOÀN BỘ các dòng sản phẩm/dịch vụ theo đúng cấu trúc object JSON đã quy định.
@@ -51,7 +53,7 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
       }],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 4096,
         responseMimeType: 'application/json'
       }
     };
@@ -60,54 +62,63 @@ Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính p
     let data = {};
     let lastStatus = 503;
     let lastMessage = 'Gemini đang quá tải';
-    const retryable = new Set([408, 429, 500, 502, 503, 504]);
-    const deadline = Date.now() + 76000;
+    const retryable = new Set([408, 429, 500, 502, 503, 504, 404]);
+    const deadline = Date.now() + 45000;
 
-    for (let i = 0; i < models.length; i++) {
-      model = models[i];
+    for (const candidate of orderedModels) {
+      model = candidate;
       const remaining = deadline - Date.now();
-      if (remaining <= 1000) break;
+      if (remaining < 2000) break;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), Math.min(i === 0 ? 30000 : 21000, remaining));
+      let timer;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      const requestBody = { ...payload, generationConfig: { ...payload.generationConfig,
+        ...(model === models[0] ? { thinkingConfig: { thinkingBudget: 0 } } : {}) } };
       response = undefined;
       data = {};
+      const started = Date.now();
       try {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        });
-        data = await response.json().catch(() => ({}));
-        if (response.ok) break;
-        lastStatus = response.status;
-        lastMessage = data?.error?.message || `HTTP ${lastStatus}`;
-        // Do not retry bad credentials or malformed requests. Missing models
-        // may be unavailable to this API key, so try the next model.
-        if (!retryable.has(lastStatus) && lastStatus !== 404) {
+        const result = await Promise.race([
+          (async () => {
+            const upstream = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+              body: JSON.stringify(requestBody),
+              signal: controller.signal
+            });
+            return { upstream, json: await upstream.json() };
+          })(),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => { controller.abort(); reject(new Error('OCR_TIMEOUT')); }, Math.min(22000, remaining - 500));
+          })
+        ]);
+        response = result.upstream;
+        data = result.json;
+        console.info('[OCR] upstream', { model, status: response.status, ms: Date.now() - started });
+        if (response.ok && data?.candidates?.[0]?.content?.parts?.some(p => p.text && !p.thought)) break;
+        lastStatus = response.ok ? 502 : response.status;
+        lastMessage = data?.error?.message || 'Gemini không trả về dữ liệu OCR';
+        if (!retryable.has(lastStatus) && !(lastStatus === 400 && /thinking/i.test(lastMessage))) {
           return res.status(lastStatus).json({ error: `Gemini API lỗi: ${lastMessage}` });
         }
+        response = undefined;
       } catch (err) {
         response = undefined;
-        lastStatus = err.name === 'AbortError' ? 504 : 503;
-        lastMessage = err.name === 'AbortError' ? 'Gemini phản hồi quá chậm' : 'Không kết nối được Gemini';
+        lastStatus = err.message === 'OCR_TIMEOUT' || err.name === 'AbortError' ? 504 : 503;
+        lastMessage = lastStatus === 504 ? 'Gemini phản hồi quá chậm' : 'Không kết nối được Gemini';
+        console.warn('[OCR] upstream failure', { model, status: lastStatus, ms: Date.now() - started });
       } finally {
-        clearTimeout(timeout);
-      }
-      if (i < models.length - 1 && Date.now() + 1200 < deadline) {
-        // A short delay avoids immediately repeating an overloaded request.
-        await new Promise((resolve) => setTimeout(resolve, 900 + Math.floor(Math.random() * 300)));
+        clearTimeout(timer);
       }
     }
 
     if (!response?.ok) {
-      return res.status(lastStatus === 404 ? 503 : lastStatus).json({
-        error: `Gemini chưa thể quét ảnh (${lastStatus}): ${lastMessage}. Đã thử các model dự phòng; hãy bấm Quét AI để thử lại ảnh lỗi.`
+      return res.status(lastStatus === 404 || lastStatus === 400 ? 503 : lastStatus).json({
+        error: `Gemini chưa thể quét ảnh (${lastStatus}): ${lastMessage}`
       });
     }
 
-    const rawText = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+    const rawText = data?.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map((p) => p.text || '').join('') || '';
     const cleaned = rawText.replace(/```json|```/gi, '').trim();
 
     let parsed = null;
