@@ -473,6 +473,36 @@
     };
     const CUSTOMER_PREFIX = 'TRƯỜNG TIỂU HỌC, TRUNG HỌC CƠ SỞ VÀ TRUNG HỌC PHỔ THÔNG ';
     const capitalizeFirst = value => String(value ?? '').trim().replace(/^./u, c => c.toLocaleUpperCase('vi-VN'));
+    // Conservative brand aliases: correct known OCR spellings, not unknown SKUs.
+    const PRODUCT_BRANDS = [
+      [/\b(?:dynamite|dinamite|dynamit)\b/giu, 'Dynamite'],
+      [/\b(?:nabati|habati|nabatti)\b/giu, 'Nabati'],
+      [/\bricheese\b/giu, 'Richeese'],
+      [/\brichoco\b/giu, 'Richoco'],
+      [/\bchupa[\s-]*chups?\b/giu, 'Chupa Chups'],
+      [/\bchoco[\s-]*pie\b/giu, 'Choco Pie'],
+      [/\boishi\b/giu, 'Oishi'],
+      [/\borion\b/giu, 'Orion'],
+      [/\blotte\b/giu, 'Lotte'],
+      [/\bdento\b/giu, 'Dento'],
+      [/\bmilo\b/giu, 'Milo'],
+      [/\byo[\s-]*most\b/giu, 'Yomost'],
+      [/\b(?:lay['’]?s|lays)\b/giu, "Lay's"],
+      [/\bpoca\b/giu, 'Poca'],
+      [/\bcalbee\b/giu, 'Calbee'],
+      [/\b(?:ponnie|ponni)\b/giu, 'Ponnie'],
+      [/\boreo\b/giu, 'Oreo'],
+      [/\bkit[\s-]*kat\b/giu, 'KitKat'],
+      [/\bcosy\b/giu, 'Cosy'],
+      [/\bafc\b/giu, 'AFC'],
+      [/\bvinamilk\b/giu, 'Vinamilk']
+    ];
+    function normalizeProductName(value) {
+      let name = String(value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
+      for (const [pattern, brand] of PRODUCT_BRANDS) name = name.replace(pattern, brand);
+      name = name.replace(/ph[oô]\s*mai/giu, 'phô mai');
+      return capitalizeFirst(name);
+    }
     const normalizeUnit = value => {
       const v = String(value ?? '').trim().toLocaleLowerCase('vi-VN');
       const units = { 'kg':'Kg', 'hộp':'Hộp', 'bịch':'Bịch', 'thùng':'Thùng', 'vỉ':'Vỉ', 'vĩ':'Vĩ', 'gói':'Gói', 'chai':'Chai', 'lon':'Lon', 'cái':'Cái', 'lốc':'Lốc', 'túi':'Túi', 'bao':'Bao', 'hũ':'Hũ' };
@@ -986,7 +1016,7 @@
           return {
             id: uid(),
             date: toISODate(item.date) || invoiceDate,
-            name: capitalizeFirst(item.name),
+            name: normalizeProductName(item.name),
             unit: normalizeUnit(item.unit),
             qty,
             price: finalPrice
@@ -1183,7 +1213,7 @@
       header = { ...header, ...SUPPLIER_DEFAULT };
       header.customerShort = prior;
       header.customer = CUSTOMER_PREFIX + header.customerShort;
-      groups.forEach(g => (g.items || []).forEach(it => { it.name = capitalizeFirst(it.name); it.unit = normalizeUnit(it.unit); }));
+      groups.forEach(g => (g.items || []).forEach(it => { it.name = normalizeProductName(it.name); it.unit = normalizeUnit(it.unit); }));
       if (!header.period) header.period = todayISO().slice(0, 7);
       header.titleEdited = false;
       header.title = buildTitle();
@@ -1366,7 +1396,7 @@
             inp.addEventListener('blur', () => {
               const f = inp.dataset.field;
               if (f === 'name' || f === 'unit') {
-                it[f] = f === 'unit' ? normalizeUnit(inp.value) : capitalizeFirst(inp.value);
+                it[f] = f === 'unit' ? normalizeUnit(inp.value) : normalizeProductName(inp.value);
                 inp.value = it[f];
                 saveData();
               }
@@ -1533,7 +1563,7 @@
           } else {
             put(r, 1, { t: 's', v: '', s: dateStyle });
           }
-          put(r, 2, { t: 's', v: capitalizeFirst(it.name), s: cellStyle('left') });
+          put(r, 2, { t: 's', v: normalizeProductName(it.name), s: cellStyle('left') });
           put(r, 3, { t: 's', v: normalizeUnit(it.unit), s: cellStyle('left') });
           put(r, 4, { t: 'n', v: qty, s: cellStyle('right') });
           put(r, 5, { t: 'n', v: price, z: '#,##0', s: cellStyle('right', '#,##0') });
