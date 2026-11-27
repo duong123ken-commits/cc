@@ -262,39 +262,41 @@
           <span>📋</span>
           <span>Bước 3: Thông Tin Bảng Công Nợ</span>
         </h2>
-        <span class="text-xs text-slate-500">Phần đầu file Excel · AI tự điền nếu đọc được từ hóa đơn</span>
+        <span class="text-xs text-slate-500">Phần đầu theo mẫu cố định · Chọn Việt Anh hoặc Việt Anh 3</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         <div class="md:col-span-2">
           <label for="hSupplier" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Tên nhà cung cấp</label>
-          <input type="text" id="hSupplier" data-h="supplier" placeholder="VD: TIỆM BÁNH THÁI THẠNH"
+          <input type="text" id="hSupplier" readonly data-h="supplier" placeholder="VD: TIỆM BÁNH THÁI THẠNH"
             class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div class="md:col-span-2">
           <label for="hAddress" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Địa chỉ</label>
-          <input type="text" id="hAddress" data-h="address" placeholder="Địa chỉ nhà cung cấp"
+          <input type="text" id="hAddress" readonly data-h="address" placeholder="Địa chỉ nhà cung cấp"
             class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div>
           <label for="hTax" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Mã số thuế</label>
-          <input type="text" id="hTax" data-h="taxCode" inputmode="numeric" placeholder="VD: 0740770067"
+          <input type="text" id="hTax" readonly data-h="taxCode" inputmode="numeric" placeholder="VD: 0740770067"
             class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div>
           <label for="hPhone" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Số điện thoại</label>
-          <input type="tel" id="hPhone" data-h="phone" placeholder="VD: 0918202648"
+          <input type="tel" id="hPhone" readonly data-h="phone" placeholder="VD: 0918202648"
             class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div class="md:col-span-2">
           <label for="hCustomer" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Khách hàng (tên đầy đủ)</label>
-          <input type="text" id="hCustomer" data-h="customer" placeholder="VD: TRƯỜNG TIỂU HỌC, THCS VÀ THPT VIỆT ANH 3"
+          <input type="text" id="hCustomer" readonly data-h="customer" placeholder="VD: TRƯỜNG TIỂU HỌC, THCS VÀ THPT VIỆT ANH 3"
             class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
         <div>
           <label for="hCustomerShort" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">Tên khách viết gọn (dùng trong tiêu đề)</label>
-          <input type="text" id="hCustomerShort" data-h="customerShort" placeholder="VD: VIỆT ANH 3"
-            class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <select id="hCustomerShort" data-h="customerShort" class="h-input w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="VIỆT ANH">VIỆT ANH</option>
+            <option value="VIỆT ANH 3" selected>VIỆT ANH 3</option>
+          </select>
         </div>
         <div>
           <label for="hPeriod" class="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">📅 Kỳ công nợ (tháng / năm)</label>
@@ -464,9 +466,22 @@
 
     let images = [];
     let groups = [];
+    const SUPPLIER_DEFAULT = {
+      supplier: 'TIỆM BÁNH THÁI THẠNH',
+      address: 'Quầy số 28, ĐOÀN TRẦN NGHIỆP, KHU 7, PHƯỜNG THỦ DẦU MỘT, TP HCM, VIỆT NAM',
+      taxCode: '074077006710',
+      phone: '0918202648'
+    };
+    const CUSTOMER_PREFIX = 'TRƯỜNG TIỂU HỌC, TRUNG HỌC CƠ SỞ VÀ TRUNG HỌC PHỔ THÔNG ';
+    const capitalizeFirst = value => String(value ?? '').trim().replace(/^./u, c => c.toLocaleUpperCase('vi-VN'));
+    const normalizeUnit = value => {
+      const v = String(value ?? '').trim().toLocaleLowerCase('vi-VN');
+      const units = { 'kg':'Kg', 'hộp':'Hộp', 'bịch':'Bịch', 'thùng':'Thùng', 'vỉ':'Vỉ', 'vĩ':'Vĩ', 'gói':'Gói', 'chai':'Chai', 'lon':'Lon', 'cái':'Cái', 'lốc':'Lốc', 'túi':'Túi', 'bao':'Bao', 'hũ':'Hũ' };
+      return units[v] || capitalizeFirst(v);
+    };
     let header = {
-      supplier: '', address: '', taxCode: '', phone: '',
-      customer: '', customerShort: '', period: '', title: '',
+      ...SUPPLIER_DEFAULT,
+      customer: CUSTOMER_PREFIX + 'VIỆT ANH 3', customerShort: 'VIỆT ANH 3', period: '', title: '',
       titleEdited: false, periodTouched: false, onlyPeriod: false
     };
     let isScanning = false;
@@ -963,8 +978,8 @@
           return {
             id: uid(),
             date: toISODate(item.date) || invoiceDate,
-            name: String(item.name || '').trim(),
-            unit: String(item.unit || '').trim(),
+            name: capitalizeFirst(item.name),
+            unit: normalizeUnit(item.unit),
             qty,
             price: finalPrice
           };
@@ -1142,8 +1157,14 @@
           groups = Array.isArray(saved.groups) ? saved.groups : [];
         }
       } catch (_) {}
+      const prior = String(header.customerShort || header.customer || '').toLocaleUpperCase('vi-VN');
+      header = { ...header, ...SUPPLIER_DEFAULT };
+      header.customerShort = prior.includes('VIỆT ANH') && !/VIỆT ANH\s*(3|III)\b/.test(prior) ? 'VIỆT ANH' : 'VIỆT ANH 3';
+      header.customer = CUSTOMER_PREFIX + header.customerShort;
+      groups.forEach(g => (g.items || []).forEach(it => { it.name = capitalizeFirst(it.name); it.unit = normalizeUnit(it.unit); }));
       if (!header.period) header.period = todayISO().slice(0, 7);
-      if (!header.title) header.title = buildTitle();
+      header.titleEdited = false;
+      header.title = buildTitle();
       fillHeaderInputs();
     }
 
@@ -1151,6 +1172,11 @@
       inp.addEventListener('input', () => {
         const k = inp.dataset.h;
         header[k] = inp.value;
+        if (k === 'customerShort') {
+          header.customer = CUSTOMER_PREFIX + header.customerShort;
+          header.titleEdited = false;
+          $('hCustomer').value = header.customer;
+        }
         if (k === 'title') {
           header.titleEdited = true;
         } else if (!header.titleEdited && (k === 'customerShort' || k === 'customer' || k === 'period')) {
@@ -1315,6 +1341,14 @@
               }
               saveData();
             });
+            inp.addEventListener('blur', () => {
+              const f = inp.dataset.field;
+              if (f === 'name' || f === 'unit') {
+                it[f] = f === 'unit' ? normalizeUnit(inp.value) : capitalizeFirst(inp.value);
+                inp.value = it[f];
+                saveData();
+              }
+            });
           });
           rowEl.querySelector('.item-del').addEventListener('click', () => {
             g.items = g.items.filter((x) => x.id !== it.id);
@@ -1438,7 +1472,8 @@
       ];
       headLines.forEach((txt, r) => {
         put(r, 0, { t: 's', v: txt, s: sty({ alignment: { horizontal: 'left', vertical: 'center' } }) });
-        merges.push({ s: { r, c: 0 }, e: { r, c: COLS - 1 } });
+        const endCol = [3, 8, 2, 2, 8][r];
+        merges.push({ s: { r, c: 0 }, e: { r, c: endCol } });
       });
 
       const TITLE_ROW = 6;
@@ -1451,7 +1486,7 @@
 
       const HEAD_ROW = 7;
       ['STT', 'NGÀY', 'TÊN SẢN PHẨM', 'ĐVT', 'SL', 'ĐƠN GIÁ', 'THÀNH TIỀN'].forEach((h, c) => {
-        put(HEAD_ROW, c, { t: 's', v: h, s: cellStyle('center', null, true) });
+        put(HEAD_ROW, c, { t: 's', v: h, s: cellStyle(c === 2 ? 'center' : 'left', null, true) });
       });
 
       let r = HEAD_ROW + 1;
@@ -1468,15 +1503,17 @@
           grand += amount;
           const excelRow = r + 1;
 
-          put(r, 0, { t: 'n', v: i + 1, s: cellStyle('center') });
+          put(r, 0, { t: 'n', v: i + 1, s: cellStyle('right') });
+          const dateStyle = cellStyle('center', 'd/m/yyyy');
+          dateStyle.border = { left: thin, right: thin, ...(i === 0 ? { top: thin } : {}), ...(i === g.items.length - 1 ? { bottom: thin } : {}) };
           if (i === 0 && g.date) {
-            put(r, 1, { t: 'n', v: isoToExcelSerial(g.date), z: 'd/m/yyyy', s: cellStyle('center', 'd/m/yyyy') });
+            put(r, 1, { t: 'n', v: isoToExcelSerial(g.date), z: 'd/m/yyyy', s: dateStyle });
           } else {
-            put(r, 1, { t: 's', v: '', s: cellStyle('center') });
+            put(r, 1, { t: 's', v: '', s: dateStyle });
           }
-          put(r, 2, { t: 's', v: it.name || '', s: cellStyle('left') });
-          put(r, 3, { t: 's', v: it.unit || '', s: cellStyle('center') });
-          put(r, 4, { t: 'n', v: qty, s: cellStyle('center') });
+          put(r, 2, { t: 's', v: capitalizeFirst(it.name), s: cellStyle('left') });
+          put(r, 3, { t: 's', v: normalizeUnit(it.unit), s: cellStyle('left') });
+          put(r, 4, { t: 'n', v: qty, s: cellStyle('right') });
           put(r, 5, { t: 'n', v: price, z: '#,##0', s: cellStyle('right', '#,##0') });
           put(r, 6, { t: 'n', v: amount, f: `E${excelRow}*F${excelRow}`, z: '#,##0', s: cellStyle('right', '#,##0') });
           r++;
@@ -1499,21 +1536,22 @@
       merges.push({ s: { r, c: 0 }, e: { r, c: 4 } });
       merges.push({ s: { r, c: 5 }, e: { r, c: 6 } });
 
-      ws['!ref'] = XL.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: COLS - 1 } });
+      ws['!ref'] = XL.utils.encode_range({ s: { r: 0, c: 0 }, e: { r, c: 8 } });
       ws['!merges'] = merges;
       ws['!cols'] = [
-        { wch: 10.83 },
-        { wch: 26.5 },
-        { wch: 52.5 },
-        { wch: 10.83 },
-        { wch: 9 },
-        { wch: 14 },
-        { wch: 36.33 }
+        { width: 10.83203125 },
+        { width: 26.5 },
+        { width: 52.5 },
+        { width: 10.83203125 },
+        { width: 10 },
+        { width: 10 },
+        { width: 36.33203125 }
       ];
       const rowsMeta = [];
+      for (let i = 0; i <= r; i++) rowsMeta[i] = { hpt: 16 };
       rowsMeta[TITLE_ROW] = { hpt: 17 };
       ws['!rows'] = rowsMeta;
-      ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 };
+      ws['!margins'] = { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 };
 
       const wb = XL.utils.book_new();
       XL.utils.book_append_sheet(wb, ws, 'Sheet1');
