@@ -457,8 +457,8 @@
     // =========================================================================
     // APP STATE & UTILITIES
     // =========================================================================
-    const MAX_IMAGE_DIM = 1600;
-    const JPEG_QUALITY = 0.8;
+    const MAX_IMAGE_DIM = 2400;
+    const JPEG_QUALITY = 0.94;
     const REQUEST_TIMEOUT_MS = 90000;
     const DATA_STORAGE_KEY = 'hoa_don_data_v2';
 
@@ -679,7 +679,9 @@
               ctx.fillRect(0, 0, width, height);
               ctx.drawImage(img, 0, 0, width, height);
 
-              const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+              let dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+              for (let q = 0.9; dataUrl.length > 3900000 && q >= 0.5; q -= 0.1) dataUrl = canvas.toDataURL('image/jpeg', q);
+              if (dataUrl.length > 3900000) throw new Error('Ảnh quá lớn, vui lòng chọn ảnh nhỏ hơn');
               const base64 = dataUrl.split(',')[1] || '';
               const compSize = Math.round((base64.length * 3) / 4);
 
@@ -932,6 +934,7 @@
         throw new Error(payload.error || `HTTP ${res.status}`);
       }
 
+      if (Array.isArray(payload.warnings)) payload.warnings.forEach(w => appendLog(`⚠ ${img.name}: ${w}`));
       const parsed = payload.data;
       let rawItems, invoiceDate = '', meta = {};
       if (Array.isArray(parsed)) {
