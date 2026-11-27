@@ -363,6 +363,7 @@
       </div>
       <!-- Invoice groups -->
       <div id="groupList" class="space-y-4"></div>
+      <div class="grid grid-cols-2 gap-2 mt-4"><button type="button" id="resultAddBottom" class="min-h-[52px] rounded-xl bg-blue-700 text-white font-bold">+ Thêm ảnh</button><button type="button" id="resultRescanBottom" class="min-h-[52px] rounded-xl border-2 border-blue-300 text-blue-800 font-bold">Quét lại ảnh</button></div>
 
       <!-- SUMMARY BAR -->
       <div class="mt-4 bg-[#eff6ff] border border-blue-200 rounded-xl px-4 py-3.5 flex flex-wrap items-center justify-between gap-2">
@@ -547,7 +548,7 @@
         name = name.replace(/\b(?:lonnie|lonni|ponie)\b/giu, 'Ponnie');
         name = name.replace(/(?:heo\s+)?cao\s+bồi/giu, 'Heo Cao Bồi');
         name = name.replace(/(?:cuộn|cuốn)\s+(?:r\s*\.?\s*b\.?|rong\s+biển)(?=\s|$)/giu, 'cuộn rong biển');
-        // The variant "Đức" is not verified: keep it visible for review.
+        name = name.replace(/^xúc xích\s+đức\s+heo cao bồi$/iu, 'Xúc xích Heo Cao Bồi');
       }
       name = name.replace(/ph[oô]\s*mai/giu, 'phô mai');
       return capitalizeFirst(name);
@@ -1074,6 +1075,7 @@
             id: uid(),
             date: toISODate(item.date) || invoiceDate,
             rawName: String(item.name || ''),
+            needsNameReview: /^xúc xích\s+đức\s+(?:heo\s+)?cao bồi$/iu.test(String(item.name || '').trim()),
             name: normalizeProductName(item.name),
             unit: normalizeUnit(item.unit),
             qty,
@@ -1160,6 +1162,8 @@
         try {
           const result = await scanSingleImage(img);
           if (!result.groups.some(g => g.items.length)) throw new Error('Không đọc được mặt hàng; giữ kết quả cũ');
+          const priorRows = groups.filter(g => g.imageId === img.id).reduce((n,g)=>n+g.items.length,0);
+          if (priorRows && result.groups.reduce((n,g)=>n+g.items.length,0) < priorRows) throw new Error('Lần quét lại thiếu dòng; giữ kết quả cũ');
           const before = groups.length;
           groups = groups.filter((g) => g.imageId !== img.id);
           if (groups.length < before) appendLog(`↳ Thay thế dữ liệu quét cũ của "${img.name}"`);
@@ -1285,7 +1289,7 @@
       header = { ...header, ...SUPPLIER_DEFAULT };
       header.customerShort = prior;
       header.customer = CUSTOMER_PREFIX + header.customerShort;
-      groups.forEach(g => (g.items || []).forEach(it => { it.name = normalizeProductName(it.name); it.unit = normalizeUnit(it.unit); }));
+      groups.forEach(g => (g.items || []).forEach(it => { if (/^xúc xích\s+đức\s+(?:heo\s+)?cao bồi$/iu.test(it.name)) { it.rawName = it.rawName || it.name; it.needsNameReview = true; } it.name = normalizeProductName(it.name); it.unit = normalizeUnit(it.unit); }));
       if (!header.period) header.period = todayISO().slice(0, 7);
       header.titleEdited = false;
       header.title = buildTitle();
@@ -1452,11 +1456,11 @@
           </div>
         `;
 
-        if ((g.warnings || []).length) {
+        if ((g.warnings || []).length || g.items.some(it=>it.needsNameReview)) {
           const note = document.createElement('div'); note.className = 'p-3 bg-amber-50 text-amber-900 font-semibold text-sm';
-          note.textContent = 'Cần kiểm tra: ' + g.warnings.join(' · ');
+          note.textContent = 'Cần kiểm tra: ' + [...(g.warnings||[]), ...(g.items.some(it=>it.needsNameReview)?['Tên hoặc loại xúc xích chưa chắc chắn']:[])].join(' · ');
           const ok = document.createElement('button'); ok.type='button'; ok.className='block mt-2 underline min-h-[40px]'; ok.textContent='Đã kiểm tra hóa đơn';
-          ok.onclick = () => { g.warnings=[]; renderGroups(); saveData(); };
+          ok.onclick = () => { g.warnings=[]; g.items.forEach(it=>it.needsNameReview=false); renderGroups(); saveData(); };
           note.appendChild(ok); card.prepend(note);
         }
         card.querySelector('.g-rescan')?.addEventListener('click', () => rescanImages([g.imageId]));
@@ -1468,7 +1472,8 @@
 
         card.querySelectorAll('.item-row').forEach((rowEl) => {
           const it = g.items.find((x) => x.id === rowEl.dataset.iid);
-          if ((g.warnings || []).some(w => String(w).startsWith('Dòng ' + (g.items.indexOf(it)+1) + ':')) || /^xúc xích\s+đức\s+heo cao bồi/iu.test(it.name)) rowEl.classList.add('ocr-review');
+          if ((g.warnings || []).some(w => String(w).startsWith('Dòng ' + (g.items.indexOf(it)+1) + ':')) || it.needsNameReview) rowEl.classList.add('ocr-review');
+          if (it.needsNameReview) { const note = document.createElement('p'); note.className='col-span-full text-amber-800 text-sm font-semibold'; note.textContent='Kiểm tra loại xúc xích (có thể là loại lắc).'; rowEl.appendChild(note); }
           rowEl.querySelectorAll('input[data-field]').forEach((inp) => {
             let previous = inp.value;
             inp.addEventListener('focus', () => { previous = inp.value; });
@@ -1485,7 +1490,7 @@
               const f = inp.dataset.field;
               if (f === 'name' || f === 'unit') {
                 it[f] = f === 'unit' ? normalizeUnit(inp.value) : normalizeProductName(inp.value, false);
-                if (f === 'name' && previous !== inp.value && it[f]) { rememberProduct(it.rawName || previous, it[f]); refreshProductSuggestions(); }
+                if (f === 'name' && previous !== inp.value && it[f]) { rememberProduct(it.rawName || previous, it[f]); it.needsNameReview = false; refreshProductSuggestions(); updateSimpleStatus(); }
                 inp.value = it[f];
                 saveData();
               }
@@ -1702,7 +1707,7 @@
     $('btnExport').addEventListener('click', () => {
       if (isScanning || isAdding) return toast('Đang đọc hóa đơn, vui lòng đợi xong.');
       if (images.some(i=>i.status!=='done') && !window.confirm('Còn ảnh chưa đọc xong. Chỉ xuất hóa đơn đã đọc được?')) return;
-      if (groups.some(g=>(g.warnings||[]).length || !g.date || (header.period && g.date.slice(0,7)!==header.period)) && !window.confirm('Có hóa đơn cần kiểm tra số liệu hoặc ngày. Bạn vẫn muốn xuất Excel?')) return;
+      if (groups.some(g=>(g.warnings||[]).length || g.items.some(it=>it.needsNameReview) || !g.date || (header.period && g.date.slice(0,7)!==header.period)) && !window.confirm('Có hóa đơn cần kiểm tra số liệu hoặc ngày. Bạn vẫn muốn xuất Excel?')) return;
       if (typeof XLSX === 'undefined') {
         toast('Thư viện xuất Excel chưa tải xong, vui lòng thử lại!', 'error');
         return;
@@ -1756,12 +1761,14 @@
       const busy=isScanning||isAdding>0;
       $('simpleStatus').textContent=isAdding?'Đang chuẩn bị ảnh…':isScanning?'Đang đọc hóa đơn… ('+done+'/'+images.length+' ảnh xong)':failed?done+' ảnh đã đọc · '+failed+' ảnh cần quét lại':pending?pending+' ảnh chưa đọc':groups.length?groups.length+' hóa đơn đã lưu':'Chụp hoặc chọn ảnh để bắt đầu.';
       $('simpleTotal').textContent=fmtNum(groups.reduce((sum,g)=>sum+groupTotal(g),0))+' đ';
-      const review=groups.filter(g=>(g.warnings||[]).length||g.items.some(it=>/^xúc xích\s+đức\s+heo cao bồi/iu.test(it.name))||!g.date||(header.period&&g.date.slice(0,7)!==header.period)).length;
+      const review=groups.filter(g=>(g.warnings||[]).length||g.items.some(it=>it.needsNameReview)||!g.date||(header.period&&g.date.slice(0,7)!==header.period)).length;
       $('simpleWarning').textContent=review?review+' hóa đơn cần kiểm tra lại.':'';
       $('simpleRetry').hidden=busy||!(failed||pending);
       $('simpleRescan').hidden=busy||!images.length;
       $('resultRescan').disabled=busy||!images.length;
       $('resultAddPhotos').disabled=busy;
+      $('resultAddBottom').disabled=busy;
+      $('resultRescanBottom').disabled=busy||!images.length;
       $('simpleExport').disabled=busy||!groups.some(g=>g.items.length);
       $('simpleClear').disabled=busy;
     }
@@ -1792,6 +1799,8 @@
     $('simpleRescan').onclick=()=>rescanImages(images.map(i=>i.id));
     $('resultRescan').onclick=()=>rescanImages(images.map(i=>i.id));
     $('resultAddPhotos').onclick=()=>fileInput.click();
+    $('resultAddBottom').onclick=()=>fileInput.click();
+    $('resultRescanBottom').onclick=()=>rescanImages(images.map(i=>i.id));
     $('simpleReview').onclick=()=>{
       const opened=$('section-results').classList.toggle('review-open');
       $('simpleReview').textContent=opened?'Ẩn chi tiết kết quả':'Xem và sửa kết quả';
