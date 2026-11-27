@@ -1118,6 +1118,20 @@
     // =========================================================================
     // STEP 3: HEADER INFO + PERSISTENCE
     // =========================================================================
+    function customerFromTitle(title) {
+      const normalized = String(title || '').normalize('NFC').toLocaleUpperCase('vi-VN');
+      if (!/VIỆT\s+ANH/.test(normalized)) return '';
+      return /VIỆT\s+ANH\s*(?:3|III)(?![\p{L}\p{N}])/u.test(normalized) ? 'VIỆT ANH 3' : 'VIỆT ANH';
+    }
+
+    function syncCustomer(short) {
+      if (!short) return;
+      header.customerShort = short;
+      header.customer = CUSTOMER_PREFIX + short;
+      $('hCustomerShort').value = short;
+      $('hCustomer').value = header.customer;
+    }
+
     function buildTitle() {
       const short = (header.customerShort || header.customer || '').trim().toUpperCase();
       let t = 'CÔNG NỢ';
@@ -1157,9 +1171,9 @@
           groups = Array.isArray(saved.groups) ? saved.groups : [];
         }
       } catch (_) {}
-      const prior = String(header.customerShort || header.customer || '').toLocaleUpperCase('vi-VN');
+      const prior = customerFromTitle(header.title) || customerFromTitle(header.customerShort) || customerFromTitle(header.customer) || 'VIỆT ANH 3';
       header = { ...header, ...SUPPLIER_DEFAULT };
-      header.customerShort = prior.includes('VIỆT ANH') && !/VIỆT ANH\s*(3|III)\b/.test(prior) ? 'VIỆT ANH' : 'VIỆT ANH 3';
+      header.customerShort = prior;
       header.customer = CUSTOMER_PREFIX + header.customerShort;
       groups.forEach(g => (g.items || []).forEach(it => { it.name = capitalizeFirst(it.name); it.unit = normalizeUnit(it.unit); }));
       if (!header.period) header.period = todayISO().slice(0, 7);
@@ -1173,12 +1187,12 @@
         const k = inp.dataset.h;
         header[k] = inp.value;
         if (k === 'customerShort') {
-          header.customer = CUSTOMER_PREFIX + header.customerShort;
+          syncCustomer(header.customerShort);
           header.titleEdited = false;
-          $('hCustomer').value = header.customer;
         }
         if (k === 'title') {
           header.titleEdited = true;
+          syncCustomer(customerFromTitle(header.title));
         } else if (!header.titleEdited && (k === 'customerShort' || k === 'customer' || k === 'period')) {
           header.title = buildTitle();
           $('hTitle').value = header.title;
@@ -1468,7 +1482,7 @@
         `Địa chỉ: ${hdr.address || ''}`,
         `Mã số thuế: ${hdr.taxCode || ''}`,
         `Số điện thoại: ${hdr.phone || ''}`,
-        `Khách hàng: ${hdr.customer || ''}`
+        `Khách hàng: ${CUSTOMER_PREFIX}${customerFromTitle(hdr.title) || customerFromTitle(hdr.customerShort) || 'VIỆT ANH 3'}`
       ];
       headLines.forEach((txt, r) => {
         put(r, 0, { t: 's', v: txt, s: sty({ alignment: { horizontal: 'left', vertical: 'center' } }) });
@@ -1574,6 +1588,8 @@
       }
 
       try {
+        syncCustomer(customerFromTitle(header.title) || header.customerShort);
+        saveData();
         const { wb, grand, rowCount } = buildDebtWorkbook(XLSX, { ...header, title: header.title || buildTitle() }, list);
         const baseName = (header.title || buildTitle() || 'CONG NO')
           .toUpperCase()
