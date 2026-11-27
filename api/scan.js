@@ -38,7 +38,8 @@ QUY TẮC BẮT BUỘC:
 6. Không đưa dòng tổng cộng, thuế, chiết khấu vào "items".
 7. Đọc từng hàng theo STT, đối chiếu đúng cột số lượng, đơn giá, thành tiền; bỏ dấu tick và đường gạch chéo. Không bỏ hàng có chữ viết tay.
 8. invoiceTotal là tổng ghi trên giấy, không phải tổng tự tính. Nếu không đọc được để null. Đọc chính xác số liệu trên giấy; việc kiểm tra phép tính sẽ do máy chủ thực hiện. Không tự sửa số rõ ràng để ép khớp tổng.
-9. Giữ nguyên tên hàng, quy cách, đơn vị và ngày ở cuối phiếu; không bịa thông tin.`;
+9. Giữ nguyên tên hàng, quy cách, đơn vị và ngày ở cuối phiếu; không bịa thông tin.
+10. Chuẩn hóa tên thương hiệu bánh kẹo khi nhận diện chắc chắn: Dynamite, Nabati (không phải Habati), Chupa Chups, Choco Pie, Oishi, Bento, Milo, Yomost, Lay's, Poca. Viết hoa đúng tên thương hiệu, sửa 'phomai' thành 'phô mai'. Không thêm hãng, vị, trọng lượng hoặc quy cách không nhìn thấy; khi không chắc giữ chữ đọc được.`;
 
     const userPrompt = `Hãy đọc ảnh hóa đơn này và trích xuất thông tin người bán, người mua, ngày hóa đơn và TOÀN BỘ các dòng sản phẩm/dịch vụ theo đúng cấu trúc object JSON đã quy định.
 Nếu hóa đơn chỉ ghi thành tiền mà không ghi đơn giá, tự tính price = amount / qty. Chỉ trả về object JSON thuần.`;
