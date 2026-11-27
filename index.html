@@ -484,7 +484,7 @@
       [/\boishi\b/giu, 'Oishi'],
       [/\borion\b/giu, 'Orion'],
       [/\blotte\b/giu, 'Lotte'],
-      [/\bdento\b/giu, 'Dento'],
+      [/\bbento\b/giu, 'Bento'],
       [/\bmilo\b/giu, 'Milo'],
       [/\byo[\s-]*most\b/giu, 'Yomost'],
       [/\b(?:lay['’]?s|lays)\b/giu, "Lay's"],
@@ -500,6 +500,7 @@
     function normalizeProductName(value) {
       let name = String(value ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
       for (const [pattern, brand] of PRODUCT_BRANDS) name = name.replace(pattern, brand);
+      name = name.replace(/(mực\s+)dento\b/giu, '$1Bento');
       name = name.replace(/ph[oô]\s*mai/giu, 'phô mai');
       return capitalizeFirst(name);
     }
